@@ -1,0 +1,81 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/install-state.gz
+.pnpm-debug.log*
+.yarn-integrity
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Production
+*.tsbuildinfo
+next-env.d.ts
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+
+# Debug and logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+logs/
+
+# Testing and coverage
+coverage/
+.nyc_output/
+*.lcov
+.jest/
+__snapshots__/
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+
+# Turbo and cache
+.turbo
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# Vercel (if used)
+.vercel
+
+# Cloudflare / Wrangler (if used)
+.wrangler/
+.dev.vars
+
+# TypeScript
+*.tsbuildinfo
+
+# Optional: local static export or backups (uncomment if you generate these)
+# out/
+# backup/
