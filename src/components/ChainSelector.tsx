@@ -21,9 +21,7 @@ export function ChainSelector({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedChain = CHAIN_CONFIG[selectedChainId];
-  const chainIds = getSupportedChainIds().filter(
-    (id) => id !== excludeChainId
-  );
+  const chainIds = getSupportedChainIds().filter((id) => id !== excludeChainId);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -39,26 +37,39 @@ export function ChainSelector({
   }, []);
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative flex flex-col" ref={dropdownRef}>
       <label className="text-xs text-[var(--muted)] mb-1 block">{label}</label>
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "flex items-center gap-2 px-3 py-2 rounded-xl",
+          "flex items-center gap-2 px-3 py-2.5 rounded-xl min-h-[44px] w-full min-w-0",
           "bg-[var(--card-hover)] border border-[var(--border)]",
-          "hover:border-[var(--border-hover)] transition-all",
-          "text-white text-sm font-medium min-w-[140px]"
+          "hover:border-[var(--border-hover)] transition-colors",
+          "text-white text-sm font-medium text-left",
         )}
       >
         <div
-          className="w-5 h-5 rounded-full"
+          className="relative w-5 h-5 rounded-full flex-shrink-0 overflow-hidden"
           style={{ backgroundColor: selectedChain?.color || "#666" }}
-        />
+        >
+          {selectedChain?.icon && (
+            <img
+              src={selectedChain.icon}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                e.currentTarget.style.opacity = "0";
+              }}
+            />
+          )}
+        </div>
         <span>{selectedChain?.name || "Select Chain"}</span>
         <svg
           className={cn(
             "w-4 h-4 ml-auto transition-transform",
-            isOpen && "rotate-180"
+            isOpen && "rotate-180",
           )}
           fill="none"
           stroke="currentColor"
@@ -90,13 +101,25 @@ export function ChainSelector({
                   "hover:bg-[var(--card-hover)] transition-colors",
                   chainId === selectedChainId
                     ? "text-[var(--primary)] bg-[var(--primary)]/5"
-                    : "text-white"
+                    : "text-white",
                 )}
               >
                 <div
-                  className="w-6 h-6 rounded-full flex-shrink-0"
+                  className="relative w-6 h-6 rounded-full flex-shrink-0 overflow-hidden"
                   style={{ backgroundColor: chain.color }}
-                />
+                >
+                  {chain.icon && (
+                    <img
+                      src={chain.icon}
+                      alt=""
+                      className="absolute inset-0 w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        e.currentTarget.style.opacity = "0";
+                      }}
+                    />
+                  )}
+                </div>
                 <span className="font-medium">{chain.name}</span>
                 {chainId === selectedChainId && (
                   <svg

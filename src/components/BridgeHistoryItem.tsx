@@ -58,8 +58,12 @@ export function BridgeHistoryItem({ entry, onStatusUpdate }: BridgeHistoryItemPr
 
   const fetchStatus = useCallback(() => {
     if (!adapter) return;
+    const options =
+      entry.provider === "near-intents" && entry.depositAddress
+        ? { depositAddress: entry.depositAddress, depositMemo: entry.depositMemo }
+        : undefined;
     adapter
-      .getStatus(entry.sourceTxHash, entry.fromChain, entry.toChain)
+      .getStatus(entry.sourceTxHash, entry.fromChain, entry.toChain, options)
       .then((s) => {
         setLiveStatus(s);
         if (s.state === "done" && entry.status !== "done" && onStatusUpdate) {

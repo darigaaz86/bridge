@@ -15,6 +15,11 @@ const nextConfig: NextConfig = {
         hostname: "www.qore3.com",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "coin-images.coingecko.com",
+        pathname: "/**",
+      },
     ],
   },
   // Smaller bundles for edge (Cloudflare Workers runtime)

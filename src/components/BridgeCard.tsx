@@ -103,11 +103,14 @@ export function BridgeCard() {
     approve,
     bridge,
     reset,
+    nearIntentsDepositAddress,
+    nearIntentsDepositMemo,
   } = useBridgeTransaction(
     selectedQuote,
     fromChain,
     toChain,
     fromToken,
+    toToken,
     parsedAmount
   );
 
@@ -130,8 +133,25 @@ export function BridgeCard() {
       amount: parsedAmount.toString(),
       recipient: address,
       sourceTxHash,
+      ...(selectedQuote.provider === "near-intents" &&
+        nearIntentsDepositAddress && {
+          depositAddress: nearIntentsDepositAddress,
+          depositMemo: nearIntentsDepositMemo,
+        }),
     });
-  }, [sourceTxHash, selectedQuote, address, fromChain, toChain, fromToken, toToken, parsedAmount, addEntry]);
+  }, [
+    sourceTxHash,
+    selectedQuote,
+    address,
+    fromChain,
+    toChain,
+    fromToken,
+    toToken,
+    parsedAmount,
+    addEntry,
+    nearIntentsDepositAddress,
+    nearIntentsDepositMemo,
+  ]);
 
   // Swap chains
   const handleSwapChains = () => {
@@ -151,6 +171,16 @@ export function BridgeCard() {
           fromChain={fromChain}
           toChain={toChain}
           onClose={reset}
+          depositAddress={
+            selectedQuote.provider === "near-intents"
+              ? nearIntentsDepositAddress
+              : undefined
+          }
+          depositMemo={
+            selectedQuote.provider === "near-intents"
+              ? nearIntentsDepositMemo
+              : undefined
+          }
         />
       </div>
     );
@@ -158,10 +188,10 @@ export function BridgeCard() {
 
   return (
     <div className="w-full max-w-md mx-auto">
-      <div className="glass-card p-5 space-y-4">
+      <div className="glass-card p-6 space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Bridge</h2>
+        <div className="flex items-center justify-between pb-1">
+          <h2 className="text-xl font-semibold text-white tracking-tight">Bridge</h2>
           <button
             type="button"
             onClick={openSettings}
@@ -191,8 +221,8 @@ export function BridgeCard() {
         </div>
 
         {/* FROM Section */}
-        <div className="rounded-xl bg-[var(--card-hover)] border border-[var(--border)] p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
+        <div className="rounded-2xl bg-[var(--card-hover)] border border-[var(--border)] p-4 sm:p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3 items-start">
             <ChainSelector
               selectedChainId={fromChain}
               onSelect={setFromChain}
@@ -203,11 +233,11 @@ export function BridgeCard() {
               selectedToken={fromToken}
               onSelect={(token) => {
                 setFromToken(token);
-                // Auto-match destination token
                 if (token === "USDC") setToToken("USDC");
                 else setToToken("USDT");
               }}
               chainId={fromChain}
+              label="Token"
             />
           </div>
           <AmountInput
@@ -219,15 +249,17 @@ export function BridgeCard() {
           />
         </div>
 
-        {/* Swap Button */}
-        <div className="flex justify-center -my-2 relative z-10">
+        {/* Swap Button - dedicated row so it never overflows */}
+        <div className="flex justify-center items-center py-2">
           <button
+            type="button"
             onClick={handleSwapChains}
+            aria-label="Swap chains"
             className={cn(
-              "w-10 h-10 rounded-xl flex items-center justify-center",
-              "bg-[var(--card)] border-2 border-[var(--border)]",
-              "hover:border-[var(--primary)] hover:bg-[var(--primary)]/10",
-              "transition-all active:scale-95"
+              "w-11 h-11 rounded-xl flex items-center justify-center shrink-0",
+              "bg-[var(--card)] border-2 border-[var(--border)] shadow-lg",
+              "hover:border-[var(--primary)] hover:bg-[var(--primary)]/10 hover:scale-105",
+              "transition-all duration-200 active:scale-95"
             )}
           >
             <svg
@@ -247,8 +279,8 @@ export function BridgeCard() {
         </div>
 
         {/* TO Section */}
-        <div className="rounded-xl bg-[var(--card-hover)] border border-[var(--border)] p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
+        <div className="rounded-2xl bg-[var(--card-hover)] border border-[var(--border)] p-4 sm:p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3 items-start">
             <ChainSelector
               selectedChainId={toChain}
               onSelect={setToChain}
@@ -259,6 +291,7 @@ export function BridgeCard() {
               selectedToken={toToken}
               onSelect={setToToken}
               chainId={toChain}
+              label="Token"
             />
           </div>
           <AmountInput
@@ -287,7 +320,7 @@ export function BridgeCard() {
 
         {/* CCTP Fast vs Standard (only when CCTP is an option) */}
         {quotes.some((q) => q.provider === "cctp") && !quotesLoading && (
-          <div className="flex items-center justify-between rounded-xl bg-[var(--card-hover)] border border-[var(--border)] px-3 py-2">
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-[var(--card-hover)] border border-[var(--border)] px-4 py-2.5">
             <span className="text-xs text-[var(--muted)]">CCTP speed</span>
             <div className="flex rounded-lg bg-[var(--card)] p-0.5 border border-[var(--border)]">
               <button
@@ -338,7 +371,7 @@ export function BridgeCard() {
                 <button
                   onClick={openConnectModal}
                   className={cn(
-                    "w-full py-3.5 rounded-xl font-semibold text-sm",
+                    "w-full py-4 rounded-xl font-semibold text-sm",
                     "bg-[var(--primary)] hover:bg-[var(--primary-hover)]",
                     "text-white transition-all active:scale-[0.98]"
                   )}
@@ -350,8 +383,9 @@ export function BridgeCard() {
           </div>
         ) : parsedAmount <= 0n ? (
           <button
+            type="button"
             disabled
-            className="w-full py-3.5 rounded-xl font-semibold text-sm bg-[var(--border)] text-[var(--muted)] cursor-not-allowed"
+            className="w-full py-4 rounded-xl font-semibold text-sm bg-[var(--card-hover)] border border-[var(--border)] text-[var(--muted)] cursor-not-allowed"
           >
             Enter amount
           </button>
@@ -369,29 +403,15 @@ export function BridgeCard() {
           >
             No routes available
           </button>
-        ) : isNearIntents ? (
-          <div className="space-y-2">
-            <div className="rounded-xl bg-[var(--warning)]/10 border border-[var(--warning)]/30 p-3 text-xs text-[var(--muted)]">
-              NEAR Intents execution is not integrated in this app yet. Select
-              <strong className="text-white"> Circle CCTP </strong>
-              or <strong className="text-white"> USDT0 </strong> above to bridge.
-            </div>
-            <button
-              disabled
-              className="w-full py-3.5 rounded-xl font-semibold text-sm bg-[var(--border)] text-[var(--muted)] cursor-not-allowed"
-            >
-              NEAR Intents – Coming soon
-            </button>
-          </div>
         ) : needsApproval ? (
           <button
             onClick={approve}
             disabled={txState === "approving"}
-            className={cn(
-              "w-full py-3.5 rounded-xl font-semibold text-sm transition-all",
-              txState === "approving"
-                ? "bg-[var(--warning)]/20 text-[var(--warning)] cursor-wait"
-                : "bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white active:scale-[0.98]"
+className={cn(
+                  "w-full py-4 rounded-xl font-semibold text-sm transition-all",
+                  txState === "approving"
+                    ? "bg-[var(--warning)]/20 text-[var(--warning)] cursor-wait"
+                    : "bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white active:scale-[0.98]"
             )}
           >
             {txState === "approving" ? "Approving..." : `Approve ${fromToken}`}
@@ -401,7 +421,7 @@ export function BridgeCard() {
             onClick={bridge}
             disabled={txState === "bridging"}
             className={cn(
-              "w-full py-3.5 rounded-xl font-semibold text-sm transition-all",
+              "w-full py-4 rounded-xl font-semibold text-sm transition-all",
               txState === "bridging"
                 ? "bg-[var(--primary)]/50 text-white/70 cursor-wait pulse-glow"
                 : "bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white active:scale-[0.98]"
@@ -414,9 +434,9 @@ export function BridgeCard() {
         )}
 
         {/* Powered by line */}
-        <div className="text-center text-[10px] text-[var(--muted)]/60 pt-1">
+        <p className="text-center text-xs text-[var(--muted)]/70 pt-2 border-t border-[var(--border)]/50">
           Powered by CCTP, USDT0 (LayerZero), and NEAR Intents
-        </div>
+        </p>
       </div>
     </div>
   );

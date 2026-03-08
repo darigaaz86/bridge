@@ -65,10 +65,11 @@ export interface IBridgeAdapter {
   /** Get the spender address that needs token approval */
   getApprovalAddress(fromChain: number): `0x${string}` | undefined;
 
-  /** Get current transaction status */
+  /** Get current transaction status (options used by NEAR Intents: depositAddress, depositMemo) */
   getStatus(
     txHash: string,
     fromChain: number,
-    toChain: number
+    toChain: number,
+    options?: { depositAddress?: string; depositMemo?: string }
   ): Promise<TransactionStatus>;
 }

@@ -71,6 +71,8 @@ export const LZ_ENDPOINT_IDS: Record<number, number> = {
 export const NEAR_INTENTS_API = "https://1click.chaindefuser.com/v0";
 export const NEAR_INTENTS_QUOTE_URL = `${NEAR_INTENTS_API}/quote`;
 export const NEAR_INTENTS_TOKENS_URL = `${NEAR_INTENTS_API}/tokens`;
+export const NEAR_INTENTS_STATUS_URL = `${NEAR_INTENTS_API}/status`;
+export const NEAR_INTENTS_DEPOSIT_SUBMIT_URL = `${NEAR_INTENTS_API}/deposit/submit`;
 
 // ============================================================
 // CCTP Forwarding Service (destination mint paid from fee)
@@ -85,4 +87,5 @@ export const CCTP_FORWARDING_SERVICE_HOOK_DATA =
 // ============================================================
 
 export const CCTP_IRIS_API = "https://iris-api.circle.com/v2";
-export const LZ_SCAN_API = "https://api-mainnet.layerzero-scan.com/v1";
+// LayerZero Scan API (official docs: scan.layerzero-api.com; old api-mainnet.layerzero-scan.com may return 403)
+export const LZ_SCAN_API = "https://scan.layerzero-api.com/v1";

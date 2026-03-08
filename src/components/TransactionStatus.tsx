@@ -11,6 +11,8 @@ interface TransactionStatusProps {
   fromChain: number;
   toChain: number;
   onClose: () => void;
+  depositAddress?: string;
+  depositMemo?: string;
 }
 
 const STATE_CONFIG: Record<
@@ -42,8 +44,13 @@ export function TransactionStatusDisplay({
   fromChain,
   toChain,
   onClose,
+  depositAddress,
+  depositMemo,
 }: TransactionStatusProps) {
-  const status = useTransactionStatus(txHash, provider, fromChain, toChain);
+  const status = useTransactionStatus(txHash, provider, fromChain, toChain, {
+    depositAddress,
+    depositMemo,
+  });
 
   const fromExplorer = CHAIN_CONFIG[fromChain]?.explorer;
   const toExplorer = CHAIN_CONFIG[toChain]?.explorer;

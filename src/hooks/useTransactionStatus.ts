@@ -9,7 +9,8 @@ export function useTransactionStatus(
   txHash: string | undefined,
   provider: BridgeProvider | undefined,
   fromChain: number | undefined,
-  toChain: number | undefined
+  toChain: number | undefined,
+  options?: { depositAddress?: string; depositMemo?: string }
 ) {
   const { settings } = useBridgeSettings();
   const [status, setStatus] = useState<TransactionStatus>({ state: "idle" });
@@ -21,12 +22,12 @@ export function useTransactionStatus(
     if (!adapter) return;
 
     try {
-      const newStatus = await adapter.getStatus(txHash, fromChain, toChain);
+      const newStatus = await adapter.getStatus(txHash, fromChain, toChain, options);
       setStatus(newStatus);
     } catch (error) {
       console.error("Status check failed:", error);
     }
-  }, [txHash, provider, fromChain, toChain]);
+  }, [txHash, provider, fromChain, toChain, options?.depositAddress, options?.depositMemo]);
 
   useEffect(() => {
     if (!txHash || !provider) {

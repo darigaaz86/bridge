@@ -32,10 +32,21 @@ export async function getQuotes(params: BridgeParams): Promise<BridgeQuote[]> {
 
   const results = await Promise.allSettled(quotePromises);
 
-  // Collect successful quotes
+  // Collect successful quotes only from adapters that support this route
   const quotes: BridgeQuote[] = [];
-  for (const result of results) {
-    if (result.status === "fulfilled" && result.value !== null) {
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    const adapter = supportedAdapters[i];
+    if (
+      result.status === "fulfilled" &&
+      result.value !== null &&
+      adapter.supportsRoute(
+        params.fromChain,
+        params.toChain,
+        params.fromToken,
+        params.toToken
+      )
+    ) {
       quotes.push(result.value);
     }
   }

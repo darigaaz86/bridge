@@ -1,4 +1,8 @@
-import { NEAR_INTENTS_QUOTE_URL } from "@/config/contracts";
+import {
+  NEAR_INTENTS_QUOTE_URL,
+  NEAR_INTENTS_STATUS_URL,
+  NEAR_INTENTS_DEPOSIT_SUBMIT_URL,
+} from "@/config/contracts";
 import { CHAIN_CONFIG } from "@/config/chains";
 import { PLATFORM_FEE_BPS, PROVIDER_NAMES, DEFAULT_SLIPPAGE_BPS } from "@/config/constants";
 import { calculatePlatformFee } from "@/lib/fees";
@@ -8,18 +12,6 @@ import type {
   BridgeQuote,
   TransactionStatus,
 } from "./types";
-
-// NEAR Intents supported chain identifiers mapping
-const NEAR_CHAIN_IDS: Record<number, string> = {
-  1: "eth",
-  42161: "arbitrum",
-  8453: "base",
-  10: "optimism",
-  137: "polygon",
-  43114: "avalanche",
-  56: "bsc",
-  59144: "linea",
-};
 
 /**
  * 1Click API expects originAsset/destinationAsset to be assetId from GET /v0/tokens
@@ -72,14 +64,10 @@ class NearIntentsAdapter implements IBridgeAdapter {
     fromToken: string,
     toToken: string
   ): boolean {
-    const validTokens = ["USDC", "USDT", "USDT0"];
-    if (!validTokens.includes(fromToken) || !validTokens.includes(toToken))
-      return false;
-    return (
-      NEAR_CHAIN_IDS[fromChain] !== undefined &&
-      NEAR_CHAIN_IDS[toChain] !== undefined &&
-      fromChain !== toChain
-    );
+    if (fromChain === toChain) return false;
+    const originAsset = get1ClickAssetId(fromChain, fromToken);
+    const destinationAsset = get1ClickAssetId(toChain, toToken);
+    return originAsset != null && destinationAsset != null;
   }
 
   async getQuote(params: BridgeParams): Promise<BridgeQuote | null> {
@@ -99,8 +87,8 @@ class NearIntentsAdapter implements IBridgeAdapter {
       const originAsset = get1ClickAssetId(params.fromChain, params.fromToken);
       const destinationAsset = get1ClickAssetId(params.toChain, params.toToken);
       if (!originAsset || !destinationAsset) {
-        // Chain/token not in 1Click tokens (e.g. Linea) – use fallback quote
-        return this.getFallbackQuote(params);
+        // Chain/token not in 1Click tokens – do not show this route
+        return null;
       }
 
       const recipient = params.recipient || "0x0000000000000000000000000000000000000001";
@@ -129,74 +117,202 @@ class NearIntentsAdapter implements IBridgeAdapter {
         body: JSON.stringify(body),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        const outputAmount = BigInt(data.output_amount || "0");
-        const platformFeeBps = params.platformFeeBps ?? PLATFORM_FEE_BPS;
-        const platformFee = calculatePlatformFee(params.amount, platformFeeBps);
-        const bridgeFee = params.amount - outputAmount - platformFee;
-
-        const fromChainName = CHAIN_CONFIG[params.fromChain]?.name || "";
-        const toChainName = CHAIN_CONFIG[params.toChain]?.name || "";
-
-        return {
-          provider: "near-intents",
-          providerName: this.displayName,
-          inputAmount: params.amount,
-          outputAmount: outputAmount - platformFee,
-          estimatedTime: 30,
-          gasFee: 0n,
-          bridgeFee: bridgeFee > 0n ? bridgeFee : 0n,
-          platformFee,
-          route: `${params.fromToken} on ${fromChainName} → ${params.toToken} on ${toChainName} via NEAR Intents`,
-        };
+      if (!response.ok) {
+        return null;
       }
+
+      const data = await response.json();
+      const rawOut = data.quote?.amountOut ?? data.output_amount;
+      if (rawOut == null || rawOut === "") return null;
+      const outputAmount = BigInt(rawOut);
+      const platformFeeBps = params.platformFeeBps ?? PLATFORM_FEE_BPS;
+      const platformFee = calculatePlatformFee(params.amount, platformFeeBps);
+      const bridgeFee = params.amount - outputAmount - platformFee;
+
+      const fromChainName = CHAIN_CONFIG[params.fromChain]?.name || "";
+      const toChainName = CHAIN_CONFIG[params.toChain]?.name || "";
+
+      return {
+        provider: "near-intents",
+        providerName: this.displayName,
+        inputAmount: params.amount,
+        outputAmount: outputAmount > platformFee ? outputAmount - platformFee : 0n,
+        estimatedTime: 30,
+        gasFee: 0n,
+        bridgeFee: bridgeFee > 0n ? bridgeFee : 0n,
+        platformFee,
+        route: `${params.fromToken} on ${fromChainName} → ${params.toToken} on ${toChainName} via NEAR Intents`,
+      };
     } catch {
-      // API error – use fallback
+      return null;
     }
-
-    return this.getFallbackQuote(params);
-  }
-
-  private getFallbackQuote(params: BridgeParams): BridgeQuote {
-    const platformFeeBps = params.platformFeeBps ?? PLATFORM_FEE_BPS;
-    const platformFee = calculatePlatformFee(params.amount, platformFeeBps);
-    const solverSpread = (params.amount * 2n) / 10000n;
-    const outputAmount = params.amount - platformFee - solverSpread;
-    const fromChainName =
-      CHAIN_CONFIG[params.fromChain]?.name || `Chain ${params.fromChain}`;
-    const toChainName =
-      CHAIN_CONFIG[params.toChain]?.name || `Chain ${params.toChain}`;
-    return {
-      provider: "near-intents",
-      providerName: this.displayName,
-      inputAmount: params.amount,
-      outputAmount,
-      estimatedTime: 30,
-      gasFee: 0n,
-      bridgeFee: solverSpread,
-      platformFee,
-      route: `${params.fromToken} on ${fromChainName} → ${params.toToken} on ${toChainName} via NEAR Intents`,
-    };
   }
 
   getApprovalAddress(_fromChain: number): `0x${string}` | undefined {
-    // NEAR Intents uses its own deposit contracts per chain
-    // These would need to be fetched from the 1Click API
+    // NEAR Intents: user sends tokens to deposit address via transfer(); no approval spender
     return undefined;
+  }
+
+  /**
+   * Get a live quote with deposit address (dry: false). Call only when user is about to send.
+   * @throws Error with API message when request fails or response lacks deposit address
+   */
+  async getExecutionQuote(params: BridgeParams): Promise<{
+    depositAddress: string;
+    depositMemo?: string;
+    amountIn: bigint;
+  }> {
+    if (
+      !this.supportsRoute(
+        params.fromChain,
+        params.toChain,
+        params.fromToken,
+        params.toToken
+      )
+    ) {
+      throw new Error("This route is not supported by NEAR Intents.");
+    }
+
+    const originAsset = get1ClickAssetId(params.fromChain, params.fromToken);
+    const destinationAsset = get1ClickAssetId(params.toChain, params.toToken);
+    if (!originAsset || !destinationAsset) {
+      throw new Error(
+        "NEAR Intents does not support this chain or token pair. Try another route."
+      );
+    }
+
+    const recipient = params.recipient || "0x0000000000000000000000000000000000000001";
+    const deadline = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+    const body = {
+      dry: false,
+      swapType: "EXACT_INPUT" as const,
+      slippageTolerance: params.slippageBps ?? DEFAULT_SLIPPAGE_BPS,
+      originAsset,
+      depositType: "ORIGIN_CHAIN" as const,
+      destinationAsset,
+      refundTo: recipient,
+      refundType: "ORIGIN_CHAIN" as const,
+      recipient,
+      recipientType: "DESTINATION_CHAIN" as const,
+      deadline,
+      amount: params.amount.toString(),
+      // Optional: help the relay associate the quote with the connected wallet
+      ...(params.recipient && { connectedWallets: [params.recipient] }),
+    };
+
+    const response = await fetch(NEAR_INTENTS_QUOTE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg =
+        typeof data?.message === "string"
+          ? data.message
+          : data?.error ?? `Request failed (${response.status})`;
+      throw new Error(`NEAR Intents: ${msg}`);
+    }
+
+    const quote = data.quote;
+    if (!quote?.depositAddress) {
+      throw new Error(
+        "NEAR Intents did not return a deposit address. The service may be busy; try again in a moment."
+      );
+    }
+
+    const amountIn = BigInt(quote.amountIn ?? params.amount.toString());
+    return {
+      depositAddress: quote.depositAddress,
+      depositMemo: quote.depositMemo,
+      amountIn,
+    };
+  }
+
+  async submitDepositTx(
+    txHash: string,
+    depositAddress: string,
+    depositMemo?: string
+  ): Promise<void> {
+    const body: Record<string, string> = {
+      txHash,
+      depositAddress,
+    };
+    if (depositMemo) body.memo = depositMemo;
+    await fetch(NEAR_INTENTS_DEPOSIT_SUBMIT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
   }
 
   async getStatus(
     txHash: string,
     _fromChain: number,
-    _toChain: number
+    _toChain: number,
+    options?: { depositAddress?: string; depositMemo?: string }
   ): Promise<TransactionStatus> {
-    // NEAR Intents status would be tracked via the intent ID
-    // For now, return a basic status
+    if (!options?.depositAddress) {
+      return {
+        state: "confirming",
+        sourceTxHash: txHash,
+        message: "Deposit submitted; use deposit address to check status.",
+      };
+    }
+
+    const params = new URLSearchParams({
+      depositAddress: options.depositAddress,
+    });
+    if (options.depositMemo) params.set("depositMemo", options.depositMemo);
+    const url = `${NEAR_INTENTS_STATUS_URL}?${params.toString()}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      return {
+        state: "confirming",
+        sourceTxHash: txHash,
+        message: "Checking swap status...",
+      };
+    }
+
+    const data = await response.json();
+    const status = data.status as string;
+    const swapDetails = data.swapDetails;
+
+    const destTx =
+      swapDetails?.destinationChainTxHashes?.[0]?.hash ??
+      swapDetails?.destinationChainTxHashes?.[0];
+
+    if (status === "SUCCESS") {
+      return {
+        state: "done",
+        sourceTxHash: txHash,
+        destinationTxHash: typeof destTx === "string" ? destTx : destTx?.hash,
+        message: "Swap completed.",
+      };
+    }
+    if (status === "REFUNDED" || status === "FAILED" || status === "INCOMPLETE_DEPOSIT") {
+      const reason =
+        data.swapDetails?.refundReason || data.swapDetails?.refundedAmount != null
+          ? "Refunded"
+          : "Failed";
+      return {
+        state: "failed",
+        sourceTxHash: txHash,
+        message: reason,
+      };
+    }
+
+    const messages: Record<string, string> = {
+      PENDING_DEPOSIT: "Waiting for deposit...",
+      KNOWN_DEPOSIT_TX: "Deposit detected, processing...",
+      PROCESSING: "Solvers fulfilling your swap...",
+    };
     return {
       state: "confirming",
       sourceTxHash: txHash,
-      message: "Intent submitted, solvers competing to fulfill...",
+      message: messages[status] ?? "Processing...",
     };
   }
 }

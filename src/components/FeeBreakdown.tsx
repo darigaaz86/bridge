@@ -12,7 +12,7 @@ interface FeeBreakdownProps {
 export function FeeBreakdown({ quote }: FeeBreakdownProps) {
   const { settings } = useBridgeSettings();
   return (
-    <div className="rounded-xl bg-[var(--card-hover)]/50 border border-[var(--border)] p-3 space-y-2 text-xs">
+    <div className="rounded-xl bg-[var(--card-hover)]/60 border border-[var(--border)] p-4 space-y-2.5 text-xs">
       <div className="flex justify-between text-[var(--muted)]">
         <span>Platform fee ({bpsToPercent(settings.platformFeeBps)})</span>
         <span className="text-white">

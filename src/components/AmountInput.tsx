@@ -2,7 +2,7 @@
 
 import { useTokenBalance } from "@/hooks/useTokenBalance";
 import { getTokenAddress } from "@/config/tokens";
-import { formatAmount } from "@/lib/utils";
+import { formatAmount, cn } from "@/lib/utils";
 
 interface AmountInputProps {
   value: string;
@@ -32,11 +32,11 @@ export function AmountInput({
   };
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-1">
-        <label className="text-xs text-[var(--muted)]">{label}</label>
-        <div className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
-          <span>
+    <div className="space-y-1.5">
+      <div className="flex justify-between items-baseline gap-2">
+        <label className="text-xs text-[var(--muted)] shrink-0">{label}</label>
+        <div className="flex items-center gap-2 text-xs text-[var(--muted)] min-w-0 justify-end">
+          <span className="truncate">
             Balance:{" "}
             {tokenAddress
               ? formatAmount(balance, 6, 4)
@@ -44,8 +44,9 @@ export function AmountInput({
           </span>
           {!readOnly && balance > 0n && (
             <button
+              type="button"
               onClick={handleMax}
-              className="text-[var(--primary)] hover:text-[var(--primary-hover)] font-semibold transition-colors"
+              className="text-[var(--primary)] hover:text-[var(--primary-hover)] font-semibold transition-colors shrink-0"
             >
               MAX
             </button>
@@ -58,18 +59,16 @@ export function AmountInput({
         placeholder="0.00"
         value={value}
         onChange={(e) => {
-          // Allow only valid decimal input
           const val = e.target.value;
           if (val === "" || /^\d*\.?\d*$/.test(val)) {
             onChange(val);
           }
         }}
         readOnly={readOnly}
-        className={`
-          w-full bg-transparent text-2xl font-semibold text-white
-          placeholder-[var(--muted)]/40 outline-none
-          ${readOnly ? "cursor-default opacity-70" : ""}
-        `}
+        className={cn(
+          "w-full bg-transparent text-2xl font-semibold text-white placeholder-[var(--muted)]/40 outline-none py-0.5",
+          readOnly && "cursor-default opacity-80"
+        )}
       />
     </div>
   );

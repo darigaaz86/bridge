@@ -168,7 +168,8 @@ class CCTPAdapter implements IBridgeAdapter {
   async getStatus(
     txHash: string,
     fromChain: number,
-    _toChain: number
+    _toChain: number,
+    _options?: { depositAddress?: string; depositMemo?: string }
   ): Promise<TransactionStatus> {
     try {
       // Iris V2 API format: GET /v2/messages/{sourceDomainId}?transactionHash={txHash}

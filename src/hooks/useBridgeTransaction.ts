@@ -19,6 +19,7 @@ import {
 } from "@/config/contracts";
 import { USDT0_OFT_CONTRACTS, LZ_ENDPOINT_IDS } from "@/config/contracts";
 import { getAdapter } from "@/services/router";
+import { nearIntentsAdapter } from "@/services/nearIntents";
 import type { BridgeQuote, TransactionState } from "@/services/types";
 
 interface UseBridgeTransactionResult {
@@ -28,6 +29,9 @@ interface UseBridgeTransactionResult {
   approve: () => Promise<void>;
   bridge: () => Promise<void>;
   reset: () => void;
+  /** Set after NEAR Intents bridge; use when adding history entry for status polling */
+  nearIntentsDepositAddress?: string;
+  nearIntentsDepositMemo?: string;
 }
 
 export function useBridgeTransaction(
@@ -35,11 +39,14 @@ export function useBridgeTransaction(
   fromChain: number,
   toChain: number,
   fromToken: string,
+  toToken: string,
   amount: bigint
 ): UseBridgeTransactionResult {
   const [state, setState] = useState<TransactionState>("idle");
   const [sourceTxHash, setSourceTxHash] = useState<string>();
   const [error, setError] = useState<string | null>(null);
+  const [nearIntentsDepositAddress, setNearIntentsDepositAddress] = useState<string | undefined>();
+  const [nearIntentsDepositMemo, setNearIntentsDepositMemo] = useState<string | undefined>();
 
   const { address } = useAccount();
   const { switchChainAsync } = useSwitchChain();
@@ -53,11 +60,10 @@ export function useBridgeTransaction(
       setState("approving");
       setError(null);
 
-      // NEAR Intents uses a different flow (SDK / intents), not ERC-20 approve
+      // NEAR Intents: no approval step; user sends tokens to deposit address via transfer()
       if (quote.provider === "near-intents") {
-        throw new Error(
-          "NEAR Intents execution is not available in this app yet. Please select Circle CCTP or USDT0 to bridge."
-        );
+        setState("approved");
+        return;
       }
 
       // Switch to source chain if needed
@@ -187,10 +193,28 @@ export function useBridgeTransaction(
             oftCmd: "0x" as `0x${string}`,
           };
 
-          // First get the quote for LZ fees
-          // In production, call quoteSend() first to get exact nativeFee
-          // For now, send with estimated gas
-          const estimatedLzFee = 100000000000000n; // ~0.0001 ETH fallback
+          // Get exact LayerZero fee from contract so send() doesn't revert (insufficient fee)
+          let nativeFee: bigint;
+          let lzTokenFee: bigint;
+          if (publicClient) {
+            try {
+              const msgFee = await publicClient.readContract({
+                address: oftContract,
+                abi: OFT_ABI,
+                functionName: "quoteSend",
+                args: [sendParam, false],
+              }) as { nativeFee: bigint; lzTokenFee: bigint };
+              nativeFee = msgFee.nativeFee;
+              lzTokenFee = msgFee.lzTokenFee ?? 0n;
+            } catch (e) {
+              throw new Error(
+                "Could not get USDT0 bridge fee. Ensure you have enough native token (ETH) for gas and the LayerZero fee."
+              );
+            }
+          } else {
+            nativeFee = 100000000000000n;
+            lzTokenFee = 0n;
+          }
 
           hash = await writeContractAsync({
             address: oftContract,
@@ -198,21 +222,46 @@ export function useBridgeTransaction(
             functionName: "send",
             args: [
               sendParam,
-              { nativeFee: estimatedLzFee, lzTokenFee: 0n },
+              { nativeFee, lzTokenFee },
               address,
             ],
-            value: estimatedLzFee,
+            value: nativeFee,
             chainId: fromChain,
           });
           break;
         }
 
         case "near-intents": {
-          // NEAR Intents would use the SDK for intent creation
-          // For now, throw a descriptive error
-          throw new Error(
-            "NEAR Intents execution requires the @defuse-protocol/intents-sdk. Coming soon."
-          );
+          await switchChainAsync({ chainId: fromChain });
+          const execQuote = await nearIntentsAdapter.getExecutionQuote({
+            fromChain,
+            toChain,
+            fromToken,
+            toToken,
+            amount,
+            recipient: address as `0x${string}`,
+          });
+          setNearIntentsDepositAddress(execQuote.depositAddress);
+          setNearIntentsDepositMemo(execQuote.depositMemo ?? undefined);
+          const tokenAddress = getTokenAddress(fromToken, fromChain);
+          if (!tokenAddress) throw new Error("Unsupported token for this chain");
+          hash = await writeContractAsync({
+            address: tokenAddress,
+            abi: ERC20_ABI,
+            functionName: "transfer",
+            args: [execQuote.depositAddress as `0x${string}`, execQuote.amountIn],
+            chainId: fromChain,
+          });
+          try {
+            await nearIntentsAdapter.submitDepositTx(
+              hash,
+              execQuote.depositAddress,
+              execQuote.depositMemo
+            );
+          } catch {
+            // Non-fatal: status can still be polled by deposit address
+          }
+          break;
         }
 
         default:
@@ -232,12 +281,14 @@ export function useBridgeTransaction(
         setError(errorMessage);
       }
     }
-  }, [quote, address, fromChain, toChain, amount, writeContractAsync]);
+  }, [quote, address, fromChain, toChain, fromToken, toToken, amount, writeContractAsync, switchChainAsync, publicClient]);
 
   const reset = useCallback(() => {
     setState("idle");
     setSourceTxHash(undefined);
     setError(null);
+    setNearIntentsDepositAddress(undefined);
+    setNearIntentsDepositMemo(undefined);
   }, []);
 
   return {
@@ -247,5 +298,7 @@ export function useBridgeTransaction(
     approve,
     bridge,
     reset,
+    nearIntentsDepositAddress,
+    nearIntentsDepositMemo,
   };
 }

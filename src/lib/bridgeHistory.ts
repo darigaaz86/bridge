@@ -17,6 +17,9 @@ export interface BridgeHistoryEntry {
   status: "pending" | "done" | "failed";
   destinationTxHash?: string;
   failureMessage?: string;
+  /** NEAR Intents: required for status polling */
+  depositAddress?: string;
+  depositMemo?: string;
 }
 
 function storageKey(address: string): string {

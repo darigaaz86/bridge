@@ -93,7 +93,8 @@ class USDT0Adapter implements IBridgeAdapter {
   async getStatus(
     txHash: string,
     fromChain: number,
-    _toChain: number
+    _toChain: number,
+    _options?: { depositAddress?: string; depositMemo?: string }
   ): Promise<TransactionStatus> {
     try {
       const response = await fetch(

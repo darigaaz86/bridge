@@ -1,5 +1,8 @@
 import { mainnet, arbitrum, base, optimism, polygon, avalanche, bsc, linea } from "wagmi/chains";
 
+// CoinGecko CDN (small size for token logos)
+const CG = "https://coin-images.coingecko.com/coins/images";
+
 export interface TokenConfig {
   symbol: string;
   name: string;
@@ -13,7 +16,7 @@ export const TOKENS: Record<string, TokenConfig> = {
     symbol: "USDC",
     name: "USD Coin",
     decimals: 6,
-    icon: "/tokens/usdc.svg",
+    icon: `${CG}/6319/small/usdc.png`,
     addresses: {
       [mainnet.id]: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       [arbitrum.id]: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
@@ -29,7 +32,7 @@ export const TOKENS: Record<string, TokenConfig> = {
     symbol: "USDT",
     name: "Tether USD",
     decimals: 6,
-    icon: "/tokens/usdt.svg",
+    icon: `${CG}/325/small/tether.png`,
     addresses: {
       [mainnet.id]: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
       [arbitrum.id]: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
@@ -45,7 +48,7 @@ export const TOKENS: Record<string, TokenConfig> = {
     symbol: "USDT0",
     name: "USDT0 (Omnichain)",
     decimals: 6,
-    icon: "/tokens/usdt0.svg",
+    icon: `${CG}/325/small/tether.png`,
     addresses: {
       [mainnet.id]: "0x6C96dE32CEa08842dcc4058c14d3aaAD7Fa41dee", // OFT Adapter
       [arbitrum.id]: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
