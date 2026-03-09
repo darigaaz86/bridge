@@ -5,6 +5,11 @@ import { getQuotes } from "@/services/router";
 import type { BridgeQuote, BridgeParams } from "@/services/types";
 import { QUOTE_DEBOUNCE_MS } from "@/config/constants";
 import { useBridgeSettings } from "@/contexts/BridgeSettingsContext";
+import { TRON_CHAIN_ID } from "@/config/chains";
+
+/** Placeholder recipient for quote-only requests. 1Click expects format matching destination chain. */
+const TRON_PLACEHOLDER_RECIPIENT = "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb";
+const EVM_PLACEHOLDER_RECIPIENT = "0x0000000000000000000000000000000000000000";
 
 interface UseBridgeQuoteResult {
   quotes: BridgeQuote[];
@@ -37,9 +42,13 @@ export function useBridgeQuote(
     setError(null);
 
     try {
+      const recipient =
+        params.toChain === TRON_CHAIN_ID
+          ? TRON_PLACEHOLDER_RECIPIENT
+          : EVM_PLACEHOLDER_RECIPIENT;
       const result = await getQuotes({
         ...params,
-        recipient: "0x0000000000000000000000000000000000000000", // placeholder for quote
+        recipient,
       });
 
       // Only update if this is still the latest fetch

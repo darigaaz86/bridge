@@ -1,7 +1,9 @@
 "use client";
 
 import { useTokenBalance } from "@/hooks/useTokenBalance";
-import { getTokenAddress } from "@/config/tokens";
+import { useTronBalance } from "@/hooks/useTronBalance";
+import { useTronLink } from "@/contexts/TronLinkContext";
+import { getTokenAddress, getTokenAddressEVM, isTronChain } from "@/config/tokens";
 import { formatAmount, cn } from "@/lib/utils";
 
 interface AmountInputProps {
@@ -22,7 +24,17 @@ export function AmountInput({
   readOnly = false,
 }: AmountInputProps) {
   const tokenAddress = getTokenAddress(token, chainId);
-  const { balance } = useTokenBalance(tokenAddress, chainId);
+  const evmTokenAddress = getTokenAddressEVM(token, chainId);
+  const { tronAddress } = useTronLink();
+  const evmBalance = useTokenBalance(evmTokenAddress, isTronChain(chainId) ? undefined : chainId);
+  const tronBalance = useTronBalance(
+    isTronChain(chainId) ? tokenAddress : undefined,
+    chainId,
+    isTronChain(chainId) ? tronAddress : null
+  );
+  const balance = isTronChain(chainId) ? tronBalance.balance : evmBalance.balance;
+  const isTron = isTronChain(chainId);
+  const balanceLoading = isTron ? tronBalance.loading : evmBalance.isLoading;
 
   const handleMax = () => {
     if (balance > 0n) {
@@ -38,9 +50,11 @@ export function AmountInput({
         <div className="flex items-center gap-2 text-xs text-[var(--muted)] min-w-0 justify-end">
           <span className="truncate">
             Balance:{" "}
-            {tokenAddress
-              ? formatAmount(balance, 6, 4)
-              : "—"}
+            {balanceLoading
+              ? "..."
+              : tokenAddress
+                ? formatAmount(balance, 6, 4)
+                : "—"}
           </span>
           {!readOnly && balance > 0n && (
             <button

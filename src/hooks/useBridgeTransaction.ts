@@ -11,7 +11,9 @@ import { pad } from "viem";
 import { ERC20_ABI } from "@/abi/erc20";
 import { TOKEN_MESSENGER_V2_ABI } from "@/abi/tokenMessengerV2";
 import { OFT_ABI } from "@/abi/oft";
-import { getTokenAddress } from "@/config/tokens";
+import { getTokenAddress, getTokenAddressEVM } from "@/config/tokens";
+import { TRON_CHAIN_ID } from "@/config/chains";
+import { useTronLink } from "@/contexts/TronLinkContext";
 import {
   CCTP_TOKEN_MESSENGER_V2,
   CCTP_DOMAIN_IDS,
@@ -40,7 +42,8 @@ export function useBridgeTransaction(
   toChain: number,
   fromToken: string,
   toToken: string,
-  amount: bigint
+  amount: bigint,
+  recipient: string
 ): UseBridgeTransactionResult {
   const [state, setState] = useState<TransactionState>("idle");
   const [sourceTxHash, setSourceTxHash] = useState<string>();
@@ -49,12 +52,14 @@ export function useBridgeTransaction(
   const [nearIntentsDepositMemo, setNearIntentsDepositMemo] = useState<string | undefined>();
 
   const { address } = useAccount();
+  const { tronAddress } = useTronLink();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient({ chainId: fromChain });
 
   const approve = useCallback(async () => {
-    if (!quote || !address) return;
+    const sender = fromChain === TRON_CHAIN_ID ? tronAddress : address;
+    if (!quote || !sender) return;
 
     try {
       setState("approving");
@@ -66,10 +71,12 @@ export function useBridgeTransaction(
         return;
       }
 
-      // Switch to source chain if needed
-      await switchChainAsync({ chainId: fromChain });
+      // Switch to source chain if needed (EVM only)
+      if (fromChain !== TRON_CHAIN_ID) {
+        await switchChainAsync({ chainId: fromChain });
+      }
 
-      const tokenAddress = getTokenAddress(fromToken, fromChain);
+      const tokenAddress = getTokenAddressEVM(fromToken, fromChain);
       const adapter = getAdapter(quote.provider);
       const spender = adapter?.getApprovalAddress(fromChain);
 
@@ -87,7 +94,7 @@ export function useBridgeTransaction(
           address: tokenAddress,
           abi: ERC20_ABI,
           functionName: "allowance",
-          args: [address, spender],
+          args: [sender as `0x${string}`, spender],
         });
         if (currentAllowance >= approveAmount) {
           setState("approved");
@@ -128,7 +135,8 @@ export function useBridgeTransaction(
   ]);
 
   const bridge = useCallback(async () => {
-    if (!quote || !address) return;
+    const sender = fromChain === TRON_CHAIN_ID ? tronAddress : address;
+    if (!quote || !sender || !recipient) return;
 
     try {
       setState("bridging");
@@ -138,7 +146,7 @@ export function useBridgeTransaction(
 
       switch (quote.provider) {
         case "cctp": {
-          const tokenAddress = getTokenAddress("USDC", fromChain);
+          const tokenAddress = getTokenAddressEVM("USDC", fromChain);
           const messenger = CCTP_TOKEN_MESSENGER_V2[fromChain];
           const destDomain = CCTP_DOMAIN_IDS[toChain];
 
@@ -146,7 +154,7 @@ export function useBridgeTransaction(
             throw new Error("CCTP not supported for this route");
           }
 
-          const recipientBytes32 = pad(address, { size: 32 });
+          const recipientBytes32 = pad(recipient as `0x${string}`, { size: 32 });
           const destinationCaller =
             "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
           const totalToBurn = quote.inputAmount;
@@ -181,7 +189,7 @@ export function useBridgeTransaction(
             throw new Error("USDT0 OFT not supported for this route");
           }
 
-          const recipientBytes32 = pad(address, { size: 32 });
+          const recipientBytes32 = pad(recipient as `0x${string}`, { size: 32 });
 
           const sendParam = {
             dstEid,
@@ -223,7 +231,7 @@ export function useBridgeTransaction(
             args: [
               sendParam,
               { nativeFee, lzTokenFee },
-              address,
+              address!, // EVM-only path; sender already validated
             ],
             value: nativeFee,
             chainId: fromChain,
@@ -232,34 +240,127 @@ export function useBridgeTransaction(
         }
 
         case "near-intents": {
-          await switchChainAsync({ chainId: fromChain });
-          const execQuote = await nearIntentsAdapter.getExecutionQuote({
-            fromChain,
-            toChain,
-            fromToken,
-            toToken,
-            amount,
-            recipient: address as `0x${string}`,
-          });
-          setNearIntentsDepositAddress(execQuote.depositAddress);
-          setNearIntentsDepositMemo(execQuote.depositMemo ?? undefined);
-          const tokenAddress = getTokenAddress(fromToken, fromChain);
-          if (!tokenAddress) throw new Error("Unsupported token for this chain");
-          hash = await writeContractAsync({
-            address: tokenAddress,
-            abi: ERC20_ABI,
-            functionName: "transfer",
-            args: [execQuote.depositAddress as `0x${string}`, execQuote.amountIn],
-            chainId: fromChain,
-          });
-          try {
-            await nearIntentsAdapter.submitDepositTx(
-              hash,
-              execQuote.depositAddress,
-              execQuote.depositMemo
-            );
-          } catch {
-            // Non-fatal: status can still be polled by deposit address
+          if (fromChain === TRON_CHAIN_ID) {
+            // Tron: use TronWeb to send TRC20 transfer to deposit address
+            if (!window.tronWeb?.contract) {
+              throw new Error("TronLink not ready. Please refresh and connect TronLink.");
+            }
+            const execQuote = await nearIntentsAdapter.getExecutionQuote({
+              fromChain,
+              toChain,
+              fromToken,
+              toToken,
+              amount,
+              recipient,
+              refundTo: tronAddress ?? undefined,
+            });
+            setNearIntentsDepositAddress(execQuote.depositAddress);
+            setNearIntentsDepositMemo(execQuote.depositMemo ?? undefined);
+            const trc20Address = getTokenAddress(fromToken, fromChain);
+            if (!trc20Address) throw new Error("Unsupported token for Tron");
+            const tw = window.tronWeb!;
+            const amountStr = execQuote.amountIn.toString();
+            const toAddr = execQuote.depositAddress;
+
+            // Try high-level contract API (await contract() – TronWeb returns Promise in some versions)
+            let txResult: { transaction?: string; txid?: string } | string | null = null;
+            try {
+              const factory = await Promise.resolve(tw.contract(
+                [
+                  {
+                    name: "transfer",
+                    type: "function",
+                    inputs: [
+                      { name: "to", type: "address" },
+                      { name: "value", type: "uint256" },
+                    ],
+                    outputs: [{ name: "", type: "bool" }],
+                    stateMutability: "nonpayable",
+                  },
+                ],
+                trc20Address
+              ));
+              const instance = typeof (factory as { at?: (a: string) => unknown }).at === "function"
+                ? (factory as { at: (a: string) => unknown }).at(trc20Address)
+                : factory;
+              const inst = instance as {
+                transfer?: (to: string, amount: string) => { send: (o?: { from: string }) => Promise<unknown> };
+                methods?: { transfer?: (to: string, amount: string) => { send: (o?: { from: string }) => Promise<unknown> } };
+              };
+              let sendable: { send?: (o?: { from: string }) => Promise<unknown> } | null = null;
+              if (inst.transfer) {
+                sendable = inst.transfer(toAddr, amountStr) as { send?: (o?: { from: string }) => Promise<unknown> };
+              } else if (inst.methods?.transfer) {
+                sendable = inst.methods.transfer(toAddr, amountStr) as { send?: (o?: { from: string }) => Promise<unknown> };
+              }
+              if (sendable && typeof sendable.send === "function") {
+                const tx = await sendable.send({ from: tronAddress! });
+                txResult = tx as { transaction?: string; txid?: string };
+              }
+            } catch {
+              // Fallback: triggerSmartContract + sign + sendRawTransaction (works across TronLink versions)
+            }
+            if (!txResult && tw.transactionBuilder?.triggerSmartContract && tw.trx?.sign && tw.trx?.sendRawTransaction) {
+              const functionSelector = "transfer(address,uint256)";
+              const parameter = [
+                { type: "address", value: toAddr },
+                { type: "uint256", value: amountStr },
+              ];
+              const built = await tw.transactionBuilder.triggerSmartContract(
+                trc20Address,
+                functionSelector,
+                {},
+                parameter
+              );
+              if (built?.transaction) {
+                const signed = await tw.trx.sign(built.transaction);
+                const result = (await tw.trx.sendRawTransaction(signed)) as { txid?: string; transaction?: string | { txID?: string } };
+                const txId = result?.txid ?? (typeof result?.transaction === "string" ? result.transaction : result?.transaction?.txID);
+                if (txId) txResult = { txid: txId };
+              }
+            }
+            hash = typeof txResult === "string" ? txResult : (txResult?.txid ?? (txResult as { transaction?: string })?.transaction ?? "");
+            if (!hash) throw new Error("Tron transaction failed");
+            try {
+              await nearIntentsAdapter.submitDepositTx(
+                hash,
+                execQuote.depositAddress,
+                execQuote.depositMemo
+              );
+            } catch {
+              // Non-fatal
+            }
+          } else {
+            await switchChainAsync({ chainId: fromChain });
+            const execQuote = await nearIntentsAdapter.getExecutionQuote({
+              fromChain,
+              toChain,
+              fromToken,
+              toToken,
+              amount,
+              recipient,
+              refundTo: address ?? undefined,
+            });
+            setNearIntentsDepositAddress(execQuote.depositAddress);
+            setNearIntentsDepositMemo(execQuote.depositMemo ?? undefined);
+            const tokenAddress = getTokenAddressEVM(fromToken, fromChain);
+            if (!tokenAddress) throw new Error("Unsupported token for this chain");
+            hash = await writeContractAsync({
+              address: tokenAddress,
+              abi: ERC20_ABI,
+              functionName: "transfer",
+              args: [execQuote.depositAddress as `0x${string}`, execQuote.amountIn],
+              chainId: fromChain,
+            });
+            try {
+              await nearIntentsAdapter.submitDepositTx(
+                hash,
+                execQuote.depositAddress,
+                execQuote.depositMemo
+              );
+            } catch {
+              // Non-fatal: status can still be polled by deposit address
+            }
           }
           break;
         }
@@ -281,7 +382,7 @@ export function useBridgeTransaction(
         setError(errorMessage);
       }
     }
-  }, [quote, address, fromChain, toChain, fromToken, toToken, amount, writeContractAsync, switchChainAsync, publicClient]);
+  }, [quote, address, tronAddress, recipient, fromChain, toChain, fromToken, toToken, amount, writeContractAsync, switchChainAsync, publicClient]);
 
   const reset = useCallback(() => {
     setState("idle");

@@ -3,7 +3,7 @@ import {
   NEAR_INTENTS_STATUS_URL,
   NEAR_INTENTS_DEPOSIT_SUBMIT_URL,
 } from "@/config/contracts";
-import { CHAIN_CONFIG } from "@/config/chains";
+import { CHAIN_CONFIG, TRON_CHAIN_ID } from "@/config/chains";
 import { PLATFORM_FEE_BPS, PROVIDER_NAMES, DEFAULT_SLIPPAGE_BPS } from "@/config/constants";
 import { calculatePlatformFee } from "@/lib/fees";
 import type {
@@ -31,6 +31,8 @@ const NEAR_INTENTS_ASSET_IDS: Record<string, string> = {
   "43114:USDT": "nep245:v2_1.omni.hot.tg:43114_372BeH7ENZieCaabwkbWkBiTTgXp",
   "56:USDC": "nep245:v2_1.omni.hot.tg:56_2w93GqMcEmQFDru84j3HZZWt557r",
   "56:USDT": "nep245:v2_1.omni.hot.tg:56_2CMMyVTGZkeyNZTSvS5sarzfir6g",
+  // Tron (chainId 195) – 1Click assetId for TRC20 USDT
+  "195:USDT": "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near",
 };
 
 function get1ClickAssetId(chainId: number, symbol: string): string | undefined {
@@ -91,7 +93,17 @@ class NearIntentsAdapter implements IBridgeAdapter {
         return null;
       }
 
-      const recipient = params.recipient || "0x0000000000000000000000000000000000000001";
+      // 1Click expects recipient = destination chain, refundTo = origin chain (refund goes back to sender)
+      const recipient =
+        params.recipient ||
+        (params.toChain === TRON_CHAIN_ID
+          ? "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
+          : "0x0000000000000000000000000000000000000001");
+      const refundTo =
+        params.refundTo ||
+        (params.fromChain === TRON_CHAIN_ID
+          ? "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
+          : "0x0000000000000000000000000000000000000001");
       const deadline = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 min from now
 
       const body: NearIntentsQuoteRequest = {
@@ -101,7 +113,7 @@ class NearIntentsAdapter implements IBridgeAdapter {
         originAsset,
         depositType: "ORIGIN_CHAIN",
         destinationAsset,
-        refundTo: recipient,
+        refundTo,
         refundType: "ORIGIN_CHAIN",
         recipient,
         recipientType: "DESTINATION_CHAIN",
@@ -117,12 +129,15 @@ class NearIntentsAdapter implements IBridgeAdapter {
         body: JSON.stringify(body),
       });
 
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+          console.warn("[NEAR Intents quote]", response.status, data?.message ?? data?.error ?? data);
+        }
         return null;
       }
 
-      const data = await response.json();
-      const rawOut = data.quote?.amountOut ?? data.output_amount;
+      const rawOut = data.quote?.amountOut ?? data.output_amount ?? data.amountOut;
       if (rawOut == null || rawOut === "") return null;
       const outputAmount = BigInt(rawOut);
       const platformFeeBps = params.platformFeeBps ?? PLATFORM_FEE_BPS;
@@ -181,7 +196,16 @@ class NearIntentsAdapter implements IBridgeAdapter {
       );
     }
 
-    const recipient = params.recipient || "0x0000000000000000000000000000000000000001";
+    const recipient =
+      params.recipient ||
+      (params.toChain === TRON_CHAIN_ID
+        ? "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
+        : "0x0000000000000000000000000000000000000001");
+    const refundTo =
+      params.refundTo ||
+      (params.fromChain === TRON_CHAIN_ID
+        ? "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
+        : "0x0000000000000000000000000000000000000001");
     const deadline = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
     const body = {
@@ -191,7 +215,7 @@ class NearIntentsAdapter implements IBridgeAdapter {
       originAsset,
       depositType: "ORIGIN_CHAIN" as const,
       destinationAsset,
-      refundTo: recipient,
+      refundTo,
       refundType: "ORIGIN_CHAIN" as const,
       recipient,
       recipientType: "DESTINATION_CHAIN" as const,

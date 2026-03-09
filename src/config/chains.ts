@@ -9,6 +9,9 @@ import {
   linea,
 } from "wagmi/chains";
 
+/** Tron mainnet (non-EVM); used for NEAR Intents only. Not in wagmi. */
+export const TRON_CHAIN_ID = 195;
+
 export interface ChainConfig {
   id: number;
   name: string;
@@ -105,6 +108,15 @@ export const CHAIN_CONFIG: Record<number, ChainConfig> = {
     nativeToken: "ETH",
     explorer: "https://lineascan.build",
     color: "#121212",
+  },
+  [TRON_CHAIN_ID]: {
+    id: TRON_CHAIN_ID,
+    name: "Tron",
+    shortName: "TRX",
+    icon: `${CG}/1094/small/tron-logo.png`,
+    nativeToken: "TRX",
+    explorer: "https://tronscan.org",
+    color: "#FF0013",
   },
 };
 

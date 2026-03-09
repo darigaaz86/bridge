@@ -1,4 +1,5 @@
 import { mainnet, arbitrum, base, optimism, polygon, avalanche, bsc, linea } from "wagmi/chains";
+import { TRON_CHAIN_ID } from "./chains";
 
 // CoinGecko CDN (small size for token logos)
 const CG = "https://coin-images.coingecko.com/coins/images";
@@ -8,7 +9,8 @@ export interface TokenConfig {
   name: string;
   decimals: number;
   icon: string;
-  addresses: Record<number, `0x${string}`>;
+  /** EVM: 0x... ; Tron: base58 */
+  addresses: Record<number, string>;
 }
 
 export const TOKENS: Record<string, TokenConfig> = {
@@ -42,6 +44,7 @@ export const TOKENS: Record<string, TokenConfig> = {
       [avalanche.id]: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7",
       [bsc.id]: "0x55d398326f99059fF775485246999027B3197955",
       [linea.id]: "0xA219439258ca9da29E9Cc4cE5596924745e12B93",
+      [TRON_CHAIN_ID]: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", // TRC20 USDT
     },
   },
   USDT0: {
@@ -62,8 +65,23 @@ export const TOKENS: Record<string, TokenConfig> = {
 export function getTokenAddress(
   symbol: string,
   chainId: number
-): `0x${string}` | undefined {
+): string | undefined {
   return TOKENS[symbol]?.addresses[chainId];
+}
+
+/** True for Tron (non-EVM); use for TronLink and TronWeb flows. */
+export function isTronChain(chainId: number): boolean {
+  return chainId === TRON_CHAIN_ID;
+}
+
+/** Return token address as EVM 0x or undefined if not EVM. */
+export function getTokenAddressEVM(
+  symbol: string,
+  chainId: number
+): `0x${string}` | undefined {
+  const addr = getTokenAddress(symbol, chainId);
+  if (!addr || isTronChain(chainId) || !addr.startsWith("0x")) return undefined;
+  return addr as `0x${string}`;
 }
 
 export function getTokensForChain(chainId: number): TokenConfig[] {

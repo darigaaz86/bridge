@@ -15,7 +15,9 @@ import { useBridgeTransaction } from "@/hooks/useBridgeTransaction";
 import { useBridgeHistory } from "@/hooks/useBridgeHistory";
 import { useTokenAllowance } from "@/hooks/useTokenAllowance";
 import { useBridgeSettings } from "@/contexts/BridgeSettingsContext";
-import { getTokenAddress } from "@/config/tokens";
+import { useTronLink } from "@/contexts/TronLinkContext";
+import { TRON_CHAIN_ID } from "@/config/chains";
+import { getTokenAddressEVM, getTokensForChain } from "@/config/tokens";
 import { getAdapter } from "@/services/router";
 import { cn } from "@/lib/utils";
 import { mainnet, arbitrum } from "wagmi/chains";
@@ -35,9 +37,26 @@ export function BridgeCard() {
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [preferFastTransfer, setPreferFastTransfer] = useState(settings.cctpDefaultFast);
 
+  const { tronAddress, isTronConnected, isTronAvailable, connectTron, disconnectTron } = useTronLink();
+  const recipient = toChain === TRON_CHAIN_ID ? (tronAddress ?? "") : (address ?? "");
+  const sender = fromChain === TRON_CHAIN_ID ? tronAddress : address;
+  const isSenderConnected = fromChain === TRON_CHAIN_ID ? isTronConnected : isConnected;
+
   useEffect(() => {
     setPreferFastTransfer(settings.cctpDefaultFast);
   }, [settings.cctpDefaultFast]);
+
+  // Default to USDT when Tron is selected (Tron only supports USDT)
+  useEffect(() => {
+    const fromTokens = getTokensForChain(fromChain);
+    const toTokens = getTokensForChain(toChain);
+    if (fromChain === TRON_CHAIN_ID && !fromTokens.some((t) => t.symbol === fromToken)) {
+      setFromToken("USDT");
+    }
+    if (toChain === TRON_CHAIN_ID && !toTokens.some((t) => t.symbol === toToken)) {
+      setToToken("USDT");
+    }
+  }, [fromChain, toChain]);
 
   // Parse amount to bigint
   const parsedAmount = useMemo(() => {
@@ -70,8 +89,8 @@ export function BridgeCard() {
 
   const selectedQuote = quotes[selectedRouteIndex] || bestQuote;
 
-  // Check token allowance
-  const tokenAddress = getTokenAddress(fromToken, fromChain);
+  // Check token allowance (EVM only; Tron uses direct transfer)
+  const tokenAddress = getTokenAddressEVM(fromToken, fromChain);
   const adapter = selectedQuote ? getAdapter(selectedQuote.provider) : undefined;
   const spenderAddress = adapter?.getApprovalAddress(fromChain);
 
@@ -111,7 +130,8 @@ export function BridgeCard() {
     toChain,
     fromToken,
     toToken,
-    parsedAmount
+    parsedAmount,
+    recipient
   );
 
   // Record to history when a new bridge tx is submitted
@@ -131,7 +151,7 @@ export function BridgeCard() {
       fromToken,
       toToken,
       amount: parsedAmount.toString(),
-      recipient: address,
+      recipient: recipient || address,
       sourceTxHash,
       ...(selectedQuote.provider === "near-intents" &&
         nearIntentsDepositAddress && {
@@ -364,7 +384,27 @@ export function BridgeCard() {
         )}
 
         {/* Action Button */}
-        {!isConnected ? (
+        {fromChain === TRON_CHAIN_ID && !isTronConnected ? (
+          <div className="w-full space-y-2">
+            {!isTronAvailable && (
+              <p className="text-xs text-[var(--muted)] text-center">
+                Install the TronLink extension to bridge from Tron.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => connectTron().catch((e) => console.error(e))}
+              disabled={!isTronAvailable}
+              className={cn(
+                "w-full py-4 rounded-xl font-semibold text-sm",
+                "bg-[var(--primary)] hover:bg-[var(--primary-hover)]",
+                "text-white transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              )}
+            >
+              {isTronAvailable ? "Connect Tron" : "TronLink not detected"}
+            </button>
+          </div>
+        ) : fromChain !== TRON_CHAIN_ID && !isConnected ? (
           <div className="w-full">
             <ConnectButton.Custom>
               {({ openConnectModal }) => (
@@ -403,6 +443,12 @@ export function BridgeCard() {
           >
             No routes available
           </button>
+        ) : !recipient && (fromChain === TRON_CHAIN_ID || toChain === TRON_CHAIN_ID) ? (
+          <p className="text-center py-3 text-sm text-[var(--muted)]">
+            {toChain === TRON_CHAIN_ID
+              ? "Connect Tron to receive on Tron."
+              : "Connect Tron to send from Tron."}
+          </p>
         ) : needsApproval ? (
           <button
             onClick={approve}

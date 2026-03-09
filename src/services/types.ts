@@ -32,7 +32,10 @@ export interface BridgeParams {
   fromToken: string; // token symbol (USDC, USDT, USDT0)
   toToken: string;
   amount: bigint;
-  recipient: `0x${string}`;
+  /** EVM: 0x... ; Tron: base58. Destination chain address. */
+  recipient: string;
+  /** EVM: 0x... ; Tron: base58. Origin chain address for refunds. Required for 1Click when origin is Tron. */
+  refundTo?: string;
   slippageBps?: number;
   /** Platform fee in bps; when set, adapters use this instead of default */
   platformFeeBps?: number;
