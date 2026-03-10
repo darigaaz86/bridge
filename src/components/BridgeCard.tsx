@@ -408,7 +408,7 @@ export function BridgeCard() {
 
         {/* Fee Breakdown */}
         {selectedQuote && !quotesLoading && (
-          <FeeBreakdown quote={selectedQuote} />
+          <FeeBreakdown quote={selectedQuote} fromToken={fromToken} toToken={toToken} />
         )}
 
         {/* Error Display */}

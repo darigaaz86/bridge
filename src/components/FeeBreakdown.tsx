@@ -7,16 +7,18 @@ import type { BridgeQuote } from "@/services/types";
 
 interface FeeBreakdownProps {
   quote: BridgeQuote;
+  fromToken: string;
+  toToken: string;
 }
 
-export function FeeBreakdown({ quote }: FeeBreakdownProps) {
+export function FeeBreakdown({ quote, fromToken, toToken }: FeeBreakdownProps) {
   const { settings } = useBridgeSettings();
   return (
     <div className="rounded-xl bg-[var(--card-hover)]/60 border border-[var(--border)] p-4 space-y-2.5 text-xs">
       <div className="flex justify-between text-[var(--muted)]">
         <span>Platform fee ({bpsToPercent(settings.platformFeeBps)})</span>
         <span className="text-white">
-          {formatAmount(quote.platformFee, 6, 4)} {quote.provider === "cctp" ? "USDC" : "USDT"}
+          {formatAmount(quote.platformFee, 6, 4)} {fromToken}
         </span>
       </div>
 
@@ -24,7 +26,7 @@ export function FeeBreakdown({ quote }: FeeBreakdownProps) {
         <div className="flex justify-between text-[var(--muted)]">
           <span>Bridge fee</span>
           <span className="text-white">
-            {formatAmount(quote.bridgeFee, 6, 4)}
+            {formatAmount(quote.bridgeFee, 6, 4)} {fromToken}
           </span>
         </div>
       )}
@@ -41,11 +43,10 @@ export function FeeBreakdown({ quote }: FeeBreakdownProps) {
         <span className="text-white">{formatTime(quote.estimatedTime)}</span>
       </div>
 
-      {/* CCTP: total debited = receive amount + bridge fee; show so wallet approval amount isn't a surprise */}
       {quote.provider === "cctp" && quote.bridgeFee > 0n && (
         <div className="flex justify-between font-medium text-[var(--primary)]">
           <span>Total from wallet</span>
-          <span>{formatAmount(quote.inputAmount, 6, 4)} USDC</span>
+          <span>{formatAmount(quote.inputAmount, 6, 4)} {fromToken}</span>
         </div>
       )}
 
@@ -54,8 +55,7 @@ export function FeeBreakdown({ quote }: FeeBreakdownProps) {
       <div className="flex justify-between font-medium">
         <span className="text-[var(--muted)]">You receive</span>
         <span className="text-white text-sm">
-          {formatAmount(quote.outputAmount, 6, 4)}{" "}
-          {quote.provider === "cctp" ? "USDC" : "USDT"}
+          {formatAmount(quote.outputAmount, 6, 4)} {toToken}
         </span>
       </div>
     </div>
