@@ -1,10 +1,10 @@
 import type { NextConfig } from "next";
 
 /**
- * Optimized for deployment on Cloudflare Pages.
- * npm run build produces a static export in the `out` folder (deploy that to Pages).
+ * Deployed on EC2 with Docker. Uses standalone output for minimal image size.
  */
 const nextConfig: NextConfig = {
+  output: "standalone",
   // Allow external images (e.g. Qore3 logo/favicon) when using next/image
   images: {
     unoptimized: true,
