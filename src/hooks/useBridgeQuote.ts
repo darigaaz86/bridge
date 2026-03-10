@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { getQuotes } from "@/services/router";
 import type { BridgeQuote, BridgeParams } from "@/services/types";
 import { QUOTE_DEBOUNCE_MS } from "@/config/constants";
-import { useBridgeSettings } from "@/contexts/BridgeSettingsContext";
 import { TRON_CHAIN_ID } from "@/config/chains";
 
 /** Placeholder recipient for quote-only requests. 1Click expects format matching destination chain. */
@@ -22,12 +21,10 @@ interface UseBridgeQuoteResult {
 export function useBridgeQuote(
   params: Omit<BridgeParams, "recipient"> | null
 ): UseBridgeQuoteResult {
-  const { settings } = useBridgeSettings();
   const [quotes, setQuotes] = useState<BridgeQuote[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>(null);
-  const refreshTimer = useRef<ReturnType<typeof setInterval>>(null);
   const fetchCount = useRef(0);
 
   const fetchQuotes = useCallback(async () => {
@@ -51,7 +48,6 @@ export function useBridgeQuote(
         recipient,
       });
 
-      // Only update if this is still the latest fetch
       if (currentFetch === fetchCount.current) {
         setQuotes(result);
         if (result.length === 0) {
@@ -86,21 +82,6 @@ export function useBridgeQuote(
       }
     };
   }, [fetchQuotes]);
-
-  // Auto-refresh interval (from settings)
-  useEffect(() => {
-    if (!params || params.amount <= 0n) return;
-
-    refreshTimer.current = setInterval(() => {
-      fetchQuotes();
-    }, settings.quoteRefreshIntervalMs);
-
-    return () => {
-      if (refreshTimer.current) {
-        clearInterval(refreshTimer.current);
-      }
-    };
-  }, [fetchQuotes, params, settings.quoteRefreshIntervalMs]);
 
   return {
     quotes,

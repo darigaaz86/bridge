@@ -38,7 +38,10 @@ export function BridgeCard() {
   const [preferFastTransfer, setPreferFastTransfer] = useState(settings.cctpDefaultFast);
 
   const { tronAddress, isTronConnected, isTronAvailable, connectTron, disconnectTron } = useTronLink();
-  const recipient = toChain === TRON_CHAIN_ID ? (tronAddress ?? "") : (address ?? "");
+  const [customRecipient, setCustomRecipient] = useState("");
+  const [useCustomRecipient, setUseCustomRecipient] = useState(false);
+  const selfRecipient = toChain === TRON_CHAIN_ID ? (tronAddress ?? "") : (address ?? "");
+  const recipient = useCustomRecipient && customRecipient.trim() ? customRecipient.trim() : selfRecipient;
   const sender = fromChain === TRON_CHAIN_ID ? tronAddress : address;
   const isSenderConnected = fromChain === TRON_CHAIN_ID ? isTronConnected : isConnected;
 
@@ -326,6 +329,38 @@ export function BridgeCard() {
             label="You receive"
             readOnly
           />
+        </div>
+
+        {/* Recipient Address */}
+        <div className="rounded-2xl bg-[var(--card-hover)] border border-[var(--border)] px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[var(--muted)]">Recipient</span>
+            <button
+              type="button"
+              onClick={() => {
+                setUseCustomRecipient((v) => !v);
+                if (useCustomRecipient) setCustomRecipient("");
+              }}
+              className="text-xs text-[var(--primary)] hover:text-[var(--primary-hover)] transition-colors"
+            >
+              {useCustomRecipient ? "Send to self" : "Send to other"}
+            </button>
+          </div>
+          {useCustomRecipient ? (
+            <input
+              type="text"
+              value={customRecipient}
+              onChange={(e) => setCustomRecipient(e.target.value)}
+              placeholder={toChain === TRON_CHAIN_ID ? "Tron address (T...)" : "0x..."}
+              spellCheck={false}
+              autoComplete="off"
+              className="w-full bg-transparent text-sm text-white placeholder:text-[var(--muted)]/50 outline-none font-mono"
+            />
+          ) : (
+            <p className="text-sm text-white font-mono truncate">
+              {selfRecipient || "Connect wallet"}
+            </p>
+          )}
         </div>
 
         {/* Routes */}

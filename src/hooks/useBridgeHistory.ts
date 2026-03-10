@@ -3,55 +3,76 @@
 import { useState, useCallback, useEffect } from "react";
 import { useAccount } from "wagmi";
 import type { BridgeHistoryEntry } from "@/lib/bridgeHistory";
-import {
-  getHistory,
-  saveHistory,
-  addHistoryEntry as addEntryStorage,
-  updateHistoryEntry as updateEntryStorage,
-} from "@/lib/bridgeHistory";
 
 export function useBridgeHistory() {
   const { address } = useAccount();
   const [history, setHistory] = useState<BridgeHistoryEntry[]>([]);
 
-  useEffect(() => {
+  const fetchHistory = useCallback(async () => {
     if (!address) {
       setHistory([]);
       return;
     }
-    setHistory(getHistory(address));
+    try {
+      const res = await fetch(`/api/history?address=${address}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data);
+      }
+    } catch {
+      // silent
+    }
   }, [address]);
 
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
   const addEntry = useCallback(
-    (entry: Omit<BridgeHistoryEntry, "id" | "createdAt" | "status">) => {
+    async (entry: Omit<BridgeHistoryEntry, "id" | "createdAt" | "status">) => {
       if (!address) return null;
-      const added = addEntryStorage(address, entry);
-      setHistory((prev) => [added, ...prev]);
-      return added;
+      try {
+        const res = await fetch("/api/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...entry, walletAddress: address }),
+        });
+        if (res.ok) {
+          const added: BridgeHistoryEntry = await res.json();
+          setHistory((prev) => [added, ...prev]);
+          return added;
+        }
+      } catch {
+        // silent
+      }
+      return null;
     },
     [address]
   );
 
   const updateEntry = useCallback(
-    (
+    async (
       id: string,
       updates: Partial<
         Pick<BridgeHistoryEntry, "status" | "destinationTxHash" | "failureMessage">
       >
     ) => {
       if (!address) return;
-      updateEntryStorage(address, id, updates);
-      setHistory((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
-      );
+      try {
+        await fetch(`/api/history/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates),
+        });
+        setHistory((prev) =>
+          prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
+        );
+      } catch {
+        // silent
+      }
     },
     [address]
   );
 
-  const refreshFromStorage = useCallback(() => {
-    if (!address) return;
-    setHistory(getHistory(address));
-  }, [address]);
-
-  return { history, addEntry, updateEntry, refreshFromStorage };
+  return { history, addEntry, updateEntry, refreshFromStorage: fetchHistory };
 }

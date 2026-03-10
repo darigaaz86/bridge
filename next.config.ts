@@ -5,10 +5,9 @@ import type { NextConfig } from "next";
  * npm run build produces a static export in the `out` folder (deploy that to Pages).
  */
 const nextConfig: NextConfig = {
-  output: 'export',
   // Allow external images (e.g. Qore3 logo/favicon) when using next/image
   images: {
-    unoptimized: true, // required for static export (no image optimization server)
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: "https",
@@ -22,11 +21,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // Smaller bundles for edge (Cloudflare Workers runtime)
+  // Smaller bundles
   experimental: {
     optimizePackageImports: ["@rainbow-me/rainbowkit", "wagmi", "viem"],
   },
-  // Consistent URLs; Cloudflare caches by path
   skipTrailingSlashRedirect: true,
 };
 

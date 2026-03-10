@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Providers } from "./providers";
+import { ClientOnly } from "./client-only";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -80,7 +80,7 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        <Providers>{children}</Providers>
+        <ClientOnly>{children}</ClientOnly>
       </body>
     </html>
   );
