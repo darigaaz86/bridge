@@ -4,8 +4,7 @@ import {
   NEAR_INTENTS_DEPOSIT_SUBMIT_URL,
 } from "@/config/contracts";
 import { CHAIN_CONFIG, TRON_CHAIN_ID } from "@/config/chains";
-import { PLATFORM_FEE_BPS, PROVIDER_NAMES, DEFAULT_SLIPPAGE_BPS } from "@/config/constants";
-import { calculatePlatformFee } from "@/lib/fees";
+import { PLATFORM_FEE_BPS, PROVIDER_NAMES, DEFAULT_SLIPPAGE_BPS, APP_FEE_RECIPIENT } from "@/config/constants";
 import type {
   IBridgeAdapter,
   BridgeParams,
@@ -54,11 +53,18 @@ interface NearIntentsQuoteRequest {
   recipientType: "DESTINATION_CHAIN" | "INTENTS";
   deadline: string; // ISO 8601
   amount: string;
+  appFees?: Array<{ recipient: string; fee: number }>;
 }
 
 class NearIntentsAdapter implements IBridgeAdapter {
   name = "near-intents" as const;
   displayName = PROVIDER_NAMES["near-intents"];
+
+  /** Build appFees array if a recipient is configured */
+  private buildAppFees(platformFeeBps: number): Array<{ recipient: string; fee: number }> | undefined {
+    if (!APP_FEE_RECIPIENT || platformFeeBps <= 0) return undefined;
+    return [{ recipient: APP_FEE_RECIPIENT, fee: platformFeeBps }];
+  }
 
   supportsRoute(
     fromChain: number,
@@ -119,6 +125,7 @@ class NearIntentsAdapter implements IBridgeAdapter {
         recipientType: "DESTINATION_CHAIN",
         deadline,
         amount: params.amount.toString(),
+        appFees: this.buildAppFees(params.platformFeeBps ?? PLATFORM_FEE_BPS),
       };
 
       const response = await fetch(NEAR_INTENTS_QUOTE_URL, {
@@ -141,7 +148,11 @@ class NearIntentsAdapter implements IBridgeAdapter {
       if (rawOut == null || rawOut === "") return null;
       const outputAmount = BigInt(rawOut);
       const platformFeeBps = params.platformFeeBps ?? PLATFORM_FEE_BPS;
-      const platformFee = calculatePlatformFee(params.amount, platformFeeBps);
+      // When appFees is sent, the API deducts the fee from input before swapping.
+      // Calculate what was taken so we can display it, but don't subtract again from output.
+      const platformFee = APP_FEE_RECIPIENT
+        ? (params.amount * BigInt(platformFeeBps)) / 10000n
+        : 0n;
       const bridgeFee = params.amount - outputAmount - platformFee;
 
       const fromChainName = CHAIN_CONFIG[params.fromChain]?.name || "";
@@ -151,7 +162,7 @@ class NearIntentsAdapter implements IBridgeAdapter {
         provider: "near-intents",
         providerName: this.displayName,
         inputAmount: params.amount,
-        outputAmount: outputAmount > platformFee ? outputAmount - platformFee : 0n,
+        outputAmount,
         estimatedTime: 30,
         gasFee: 0n,
         bridgeFee: bridgeFee > 0n ? bridgeFee : 0n,
@@ -221,6 +232,7 @@ class NearIntentsAdapter implements IBridgeAdapter {
       recipientType: "DESTINATION_CHAIN" as const,
       deadline,
       amount: params.amount.toString(),
+      appFees: this.buildAppFees(params.platformFeeBps ?? PLATFORM_FEE_BPS),
       // Optional: help the relay associate the quote with the connected wallet
       ...(params.recipient && { connectedWallets: [params.recipient] }),
     };
