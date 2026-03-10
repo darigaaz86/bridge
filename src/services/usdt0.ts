@@ -4,8 +4,7 @@ import {
   LZ_SCAN_API,
 } from "@/config/contracts";
 import { CHAIN_CONFIG } from "@/config/chains";
-import { PLATFORM_FEE_BPS, PROVIDER_NAMES } from "@/config/constants";
-import { calculatePlatformFee } from "@/lib/fees";
+import { PROVIDER_NAMES } from "@/config/constants";
 import type {
   IBridgeAdapter,
   BridgeParams,
@@ -52,17 +51,15 @@ class USDT0Adapter implements IBridgeAdapter {
       return null;
     }
 
-    const platformFeeBps = params.platformFeeBps ?? PLATFORM_FEE_BPS;
-    const platformFee = calculatePlatformFee(params.amount, platformFeeBps);
+    const platformFee = 0n;
 
     // Calculate bridge fee: 3 bps for Legacy Mesh, 0 for native OFT
     const isLegacyMesh =
       LEGACY_MESH_CHAINS.has(params.fromChain) ||
       LEGACY_MESH_CHAINS.has(params.toChain);
     const bridgeFeeBps = isLegacyMesh ? 3 : 0;
-    const afterPlatformFee = params.amount - platformFee;
-    const bridgeFee = (afterPlatformFee * BigInt(bridgeFeeBps)) / 10000n;
-    const outputAmount = afterPlatformFee - bridgeFee;
+    const bridgeFee = (params.amount * BigInt(bridgeFeeBps)) / 10000n;
+    const outputAmount = params.amount - bridgeFee;
 
     const estimatedTime = this.getEstimatedTime(params.fromChain);
 

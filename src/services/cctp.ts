@@ -4,8 +4,7 @@ import {
   CCTP_IRIS_API,
 } from "@/config/contracts";
 import { CHAIN_CONFIG } from "@/config/chains";
-import { PLATFORM_FEE_BPS, PROVIDER_NAMES } from "@/config/constants";
-import { calculatePlatformFee } from "@/lib/fees";
+import { PROVIDER_NAMES } from "@/config/constants";
 import type {
   IBridgeAdapter,
   BridgeParams,
@@ -122,9 +121,7 @@ class CCTPAdapter implements IBridgeAdapter {
     const destDomain = CCTP_DOMAIN_IDS[params.toChain];
     if (sourceDomain === undefined || destDomain === undefined) return null;
 
-    const platformFeeBps = params.platformFeeBps ?? PLATFORM_FEE_BPS;
-    const platformFee = calculatePlatformFee(params.amount, platformFeeBps);
-    const outputAmount = params.amount - platformFee;
+    const outputAmount = params.amount;
 
     const preferFast = params.preferFastTransfer === true;
     const feeResult = await getCctpFees(
@@ -155,7 +152,7 @@ class CCTPAdapter implements IBridgeAdapter {
       estimatedTime,
       gasFee: 0n,
       bridgeFee,
-      platformFee,
+      platformFee: 0n,
       route: `${params.fromToken} on ${fromChainName} → ${params.toToken} on ${toChainName} via CCTP${speedLabel}`,
       cctpFast: feeResult?.isFast ?? false,
     };
