@@ -15,12 +15,14 @@ export function FeeBreakdown({ quote, fromToken, toToken }: FeeBreakdownProps) {
   const { settings } = useBridgeSettings();
   return (
     <div className="rounded-xl bg-[var(--card-hover)]/60 border border-[var(--border)] p-4 space-y-2.5 text-xs">
-      <div className="flex justify-between text-[var(--muted)]">
-        <span>Platform fee ({bpsToPercent(settings.platformFeeBps)})</span>
-        <span className="text-white">
-          {formatAmount(quote.platformFee, 6, 4)} {fromToken}
-        </span>
-      </div>
+      {quote.platformFee > 0n && (
+        <div className="flex justify-between text-[var(--muted)]">
+          <span>Platform fee ({bpsToPercent(settings.platformFeeBps)})</span>
+          <span className="text-white">
+            {formatAmount(quote.platformFee, 6, 4)} {fromToken}
+          </span>
+        </div>
+      )}
 
       {quote.bridgeFee > 0n && (
         <div className="flex justify-between text-[var(--muted)]">
