@@ -1,5 +1,5 @@
 // Platform fee in basis points (1 bps = 0.01%)
-export const PLATFORM_FEE_BPS = 0; // 0% – re-enable after JWT auth is set up
+export const PLATFORM_FEE_BPS = 0;
 
 // Quote refresh interval in milliseconds
 export const QUOTE_REFRESH_INTERVAL = 15_000; // 15 seconds

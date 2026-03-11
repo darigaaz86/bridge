@@ -56,6 +56,8 @@ interface NearIntentsQuoteRequest {
   appFees?: Array<{ recipient: string; fee: number }>;
 }
 
+const TAG = "[NEAR Intents]";
+
 class NearIntentsAdapter implements IBridgeAdapter {
   name = "near-intents" as const;
   displayName = PROVIDER_NAMES["near-intents"];
@@ -128,6 +130,8 @@ class NearIntentsAdapter implements IBridgeAdapter {
         appFees: this.buildAppFees(),
       };
 
+      console.log(TAG, "getQuote request", JSON.stringify(body));
+
       const response = await fetch(NEAR_INTENTS_QUOTE_URL, {
         method: "POST",
         headers: {
@@ -138,11 +142,11 @@ class NearIntentsAdapter implements IBridgeAdapter {
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
-          console.warn("[NEAR Intents quote]", response.status, data?.message ?? data?.error ?? data);
-        }
+        console.warn(TAG, "getQuote failed", response.status, data?.message ?? data?.error ?? data);
         return null;
       }
+
+      console.log(TAG, "getQuote response", JSON.stringify(data));
 
       const rawOut = data.quote?.amountOut ?? data.output_amount ?? data.amountOut;
       if (rawOut == null || rawOut === "") return null;
@@ -154,6 +158,15 @@ class NearIntentsAdapter implements IBridgeAdapter {
         ? (params.amount * BigInt(platformFeeBps)) / 10000n
         : 0n;
       const bridgeFee = params.amount - outputAmount - platformFee;
+
+      console.log(TAG, "getQuote fees", {
+        inputAmount: params.amount.toString(),
+        outputAmount: outputAmount.toString(),
+        platformFeeBps,
+        platformFee: platformFee.toString(),
+        bridgeFee: (bridgeFee > 0n ? bridgeFee : 0n).toString(),
+        appFeeRecipient: APP_FEE_RECIPIENT || "(none)",
+      });
 
       const fromChainName = CHAIN_CONFIG[params.fromChain]?.name || "";
       const toChainName = CHAIN_CONFIG[params.toChain]?.name || "";
@@ -237,6 +250,8 @@ class NearIntentsAdapter implements IBridgeAdapter {
       ...(params.recipient && { connectedWallets: [params.recipient] }),
     };
 
+    console.log(TAG, "getExecutionQuote request", JSON.stringify(body));
+
     const response = await fetch(NEAR_INTENTS_QUOTE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -249,8 +264,11 @@ class NearIntentsAdapter implements IBridgeAdapter {
         typeof data?.message === "string"
           ? data.message
           : data?.error ?? `Request failed (${response.status})`;
+      console.error(TAG, "getExecutionQuote failed", response.status, msg);
       throw new Error(`NEAR Intents: ${msg}`);
     }
+
+    console.log(TAG, "getExecutionQuote response", JSON.stringify(data));
 
     const quote = data.quote;
     if (!quote?.depositAddress) {
@@ -277,11 +295,13 @@ class NearIntentsAdapter implements IBridgeAdapter {
       depositAddress,
     };
     if (depositMemo) body.memo = depositMemo;
-    await fetch(NEAR_INTENTS_DEPOSIT_SUBMIT_URL, {
+    console.log(TAG, "submitDepositTx", JSON.stringify(body));
+    const res = await fetch(NEAR_INTENTS_DEPOSIT_SUBMIT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    console.log(TAG, "submitDepositTx status", res.status);
   }
 
   async getStatus(
@@ -305,6 +325,7 @@ class NearIntentsAdapter implements IBridgeAdapter {
     const url = `${NEAR_INTENTS_STATUS_URL}?${params.toString()}`;
     const response = await fetch(url);
     if (!response.ok) {
+      console.warn(TAG, "getStatus failed", response.status);
       return {
         state: "confirming",
         sourceTxHash: txHash,
@@ -314,6 +335,7 @@ class NearIntentsAdapter implements IBridgeAdapter {
 
     const data = await response.json();
     const status = data.status as string;
+    console.log(TAG, "getStatus", { depositAddress: options.depositAddress, status, swapDetails: data.swapDetails });
     const swapDetails = data.swapDetails;
 
     const destTx =

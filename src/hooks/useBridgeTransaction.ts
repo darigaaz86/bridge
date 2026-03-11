@@ -254,6 +254,11 @@ export function useBridgeTransaction(
               recipient,
               refundTo: tronAddress ?? undefined,
             });
+            console.log("[NEAR Intents] Tron execQuote", {
+              depositAddress: execQuote.depositAddress,
+              depositMemo: execQuote.depositMemo,
+              amountIn: execQuote.amountIn.toString(),
+            });
             setNearIntentsDepositAddress(execQuote.depositAddress);
             setNearIntentsDepositMemo(execQuote.depositMemo ?? undefined);
             const trc20Address = getTokenAddress(fromToken, fromChain);
@@ -341,10 +346,21 @@ export function useBridgeTransaction(
               recipient,
               refundTo: address ?? undefined,
             });
+            console.log("[NEAR Intents] EVM execQuote", {
+              depositAddress: execQuote.depositAddress,
+              depositMemo: execQuote.depositMemo,
+              amountIn: execQuote.amountIn.toString(),
+            });
             setNearIntentsDepositAddress(execQuote.depositAddress);
             setNearIntentsDepositMemo(execQuote.depositMemo ?? undefined);
             const tokenAddress = getTokenAddressEVM(fromToken, fromChain);
             if (!tokenAddress) throw new Error("Unsupported token for this chain");
+            console.log("[NEAR Intents] EVM transfer", {
+              token: tokenAddress,
+              to: execQuote.depositAddress,
+              amount: execQuote.amountIn.toString(),
+              chainId: fromChain,
+            });
             hash = await writeContractAsync({
               address: tokenAddress,
               abi: ERC20_ABI,
