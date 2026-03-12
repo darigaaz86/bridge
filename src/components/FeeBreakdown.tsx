@@ -2,7 +2,7 @@
 
 import { formatAmount, formatTime } from "@/lib/utils";
 import { bpsToPercent } from "@/lib/fees";
-import { useBridgeSettings } from "@/contexts/BridgeSettingsContext";
+import { PLATFORM_FEE_BPS } from "@/config/constants";
 import type { BridgeQuote } from "@/services/types";
 
 interface FeeBreakdownProps {
@@ -12,12 +12,11 @@ interface FeeBreakdownProps {
 }
 
 export function FeeBreakdown({ quote, fromToken, toToken }: FeeBreakdownProps) {
-  const { settings } = useBridgeSettings();
   return (
     <div className="rounded-xl bg-[var(--card-hover)]/60 border border-[var(--border)] p-4 space-y-2.5 text-xs">
       {quote.platformFee > 0n && (
         <div className="flex justify-between text-[var(--muted)]">
-          <span>Platform fee ({bpsToPercent(settings.platformFeeBps)})</span>
+          <span>Platform fee ({bpsToPercent(PLATFORM_FEE_BPS)})</span>
           <span className="text-white">
             {formatAmount(quote.platformFee, 6, 4)} {fromToken}
           </span>

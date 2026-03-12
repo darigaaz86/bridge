@@ -2,7 +2,7 @@
 
 import { formatAmount, formatTime, cn } from "@/lib/utils";
 import { formatFeeBps } from "@/lib/fees";
-import { useBridgeSettings } from "@/contexts/BridgeSettingsContext";
+import { PLATFORM_FEE_BPS } from "@/config/constants";
 import type { BridgeQuote } from "@/services/types";
 
 interface RouteDisplayProps {
@@ -30,7 +30,6 @@ export function RouteDisplay({
   onSelect,
   isLoading,
 }: RouteDisplayProps) {
-  const { settings } = useBridgeSettings();
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -95,7 +94,7 @@ export function RouteDisplay({
               </div>
               <div className="text-xs text-[var(--muted)] mt-0.5 flex items-center gap-3">
                 <span>{formatTime(quote.estimatedTime)}</span>
-                <span>Fee: {formatFeeBps(settings.platformFeeBps)}</span>
+                <span>Fee: {formatFeeBps(PLATFORM_FEE_BPS)}</span>
               </div>
             </div>
 
