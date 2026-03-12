@@ -1,4 +1,32 @@
 services:
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - app
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:-}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://qore-bridge.qore3.com}
+      NEXT_PUBLIC_INDEXER_API_URL: ${NEXT_PUBLIC_INDEXER_API_URL:-http://localhost:8080}
+      NEXT_PUBLIC_AGGREGATOR_ETHEREUM: ${NEXT_PUBLIC_AGGREGATOR_ETHEREUM:-}
+      NEXT_PUBLIC_AGGREGATOR_ARBITRUM: ${NEXT_PUBLIC_AGGREGATOR_ARBITRUM:-}
+      NEXT_PUBLIC_AGGREGATOR_BASE: ${NEXT_PUBLIC_AGGREGATOR_BASE:-}
+      NEXT_PUBLIC_AGGREGATOR_OPTIMISM: ${NEXT_PUBLIC_AGGREGATOR_OPTIMISM:-}
+      NEXT_PUBLIC_AGGREGATOR_POLYGON: ${NEXT_PUBLIC_AGGREGATOR_POLYGON:-}
+      NEXT_PUBLIC_AGGREGATOR_AVALANCHE: ${NEXT_PUBLIC_AGGREGATOR_AVALANCHE:-}
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -8,7 +36,6 @@ services:
       POSTGRES_DB: qorebridge
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
     healthcheck:
@@ -16,19 +43,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-
-  app:
-    build: .
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      DATABASE_URL: postgresql://qorebridge:${POSTGRES_PASSWORD:-changeme}@db:5432/qorebridge
-      NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:-}
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
-    depends_on:
-      db:
-        condition: service_healthy
 
 volumes:
   pgdata:
