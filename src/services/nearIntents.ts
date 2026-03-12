@@ -63,9 +63,10 @@ class NearIntentsAdapter implements IBridgeAdapter {
   displayName = PROVIDER_NAMES["near-intents"];
 
   /** Build appFees array if a recipient is configured */
-  private buildAppFees(): Array<{ recipient: string; fee: number }> | undefined {
-    if (!APP_FEE_RECIPIENT || PLATFORM_FEE_BPS <= 0) return undefined;
-    return [{ recipient: APP_FEE_RECIPIENT, fee: PLATFORM_FEE_BPS }];
+  private buildAppFees(feeBps?: number): Array<{ recipient: string; fee: number }> | undefined {
+    const bps = feeBps ?? PLATFORM_FEE_BPS;
+    if (!APP_FEE_RECIPIENT || bps <= 0) return undefined;
+    return [{ recipient: APP_FEE_RECIPIENT, fee: bps }];
   }
 
   supportsRoute(
@@ -127,7 +128,7 @@ class NearIntentsAdapter implements IBridgeAdapter {
         recipientType: "DESTINATION_CHAIN",
         deadline,
         amount: params.amount.toString(),
-        appFees: this.buildAppFees(),
+        appFees: this.buildAppFees(params.platformFeeBps),
       };
 
       console.log(TAG, "getQuote request", JSON.stringify(body));
@@ -151,10 +152,10 @@ class NearIntentsAdapter implements IBridgeAdapter {
       const rawOut = data.quote?.amountOut ?? data.output_amount ?? data.amountOut;
       if (rawOut == null || rawOut === "") return null;
       const outputAmount = BigInt(rawOut);
-      const platformFeeBps = PLATFORM_FEE_BPS;
+      const platformFeeBps = params.platformFeeBps ?? PLATFORM_FEE_BPS;
       // When appFees is sent, the API deducts the fee from input before swapping.
       // Calculate what was taken so we can display it, but don't subtract again from output.
-      const platformFee = APP_FEE_RECIPIENT
+      const platformFee = APP_FEE_RECIPIENT && platformFeeBps > 0
         ? (params.amount * BigInt(platformFeeBps)) / 10000n
         : 0n;
       const bridgeFee = params.amount - outputAmount - platformFee;
@@ -245,7 +246,7 @@ class NearIntentsAdapter implements IBridgeAdapter {
       recipientType: "DESTINATION_CHAIN" as const,
       deadline,
       amount: params.amount.toString(),
-      appFees: this.buildAppFees(),
+      appFees: this.buildAppFees(params.platformFeeBps),
       // Optional: help the relay associate the quote with the connected wallet
       ...(params.recipient && { connectedWallets: [params.recipient] }),
     };

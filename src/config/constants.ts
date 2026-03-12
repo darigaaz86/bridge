@@ -1,5 +1,10 @@
 // Platform fee in basis points (1 bps = 0.01%)
-export const PLATFORM_FEE_BPS = 0;
+export const PLATFORM_FEE_BPS = 100; // 1% default for NEAR Intents
+
+// Valid promo codes that waive the platform fee
+export const VALID_PROMO_CODES: string[] = [
+  "QORE0FEE",
+];
 
 // Quote refresh interval in milliseconds
 export const QUOTE_REFRESH_INTERVAL = 15_000; // 15 seconds

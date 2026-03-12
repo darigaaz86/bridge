@@ -43,7 +43,8 @@ export function useBridgeTransaction(
   fromToken: string,
   toToken: string,
   amount: bigint,
-  recipient: string
+  recipient: string,
+  platformFeeBps?: number
 ): UseBridgeTransactionResult {
   const [state, setState] = useState<TransactionState>("idle");
   const [sourceTxHash, setSourceTxHash] = useState<string>();
@@ -253,6 +254,7 @@ export function useBridgeTransaction(
               amount,
               recipient,
               refundTo: tronAddress ?? undefined,
+              platformFeeBps,
             });
             console.log("[NEAR Intents] Tron execQuote", {
               depositAddress: execQuote.depositAddress,
@@ -345,6 +347,7 @@ export function useBridgeTransaction(
               amount,
               recipient,
               refundTo: address ?? undefined,
+              platformFeeBps,
             });
             console.log("[NEAR Intents] EVM execQuote", {
               depositAddress: execQuote.depositAddress,

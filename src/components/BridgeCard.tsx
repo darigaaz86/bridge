@@ -15,7 +15,7 @@ import { useBridgeTransaction } from "@/hooks/useBridgeTransaction";
 import { useBridgeHistory } from "@/hooks/useBridgeHistory";
 import { useTokenAllowance } from "@/hooks/useTokenAllowance";
 import { useTronLink } from "@/contexts/TronLinkContext";
-import { DEFAULT_SLIPPAGE_BPS, PLATFORM_FEE_BPS } from "@/config/constants";
+import { DEFAULT_SLIPPAGE_BPS, PLATFORM_FEE_BPS, VALID_PROMO_CODES } from "@/config/constants";
 import { TRON_CHAIN_ID } from "@/config/chains";
 import { getTokenAddressEVM, getTokensForChain } from "@/config/tokens";
 import { getAdapter } from "@/services/router";
@@ -35,6 +35,12 @@ export function BridgeCard() {
   const [amount, setAmount] = useState("");
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [preferFastTransfer, setPreferFastTransfer] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+
+  const isPromoValid = VALID_PROMO_CODES.some(
+    (code) => code.toUpperCase() === promoCode.trim().toUpperCase()
+  );
+  const effectiveFeeBps = isPromoValid ? 0 : PLATFORM_FEE_BPS;
 
   const { tronAddress, isTronConnected, isTronAvailable, connectTron, disconnectTron } = useTronLink();
   const [customRecipient, setCustomRecipient] = useState("");
@@ -76,10 +82,10 @@ export function BridgeCard() {
       toToken,
       amount: parsedAmount,
       slippageBps: DEFAULT_SLIPPAGE_BPS,
-      platformFeeBps: PLATFORM_FEE_BPS,
+      platformFeeBps: effectiveFeeBps,
       preferFastTransfer,
     };
-  }, [fromChain, toChain, fromToken, toToken, parsedAmount, preferFastTransfer]);
+  }, [fromChain, toChain, fromToken, toToken, parsedAmount, preferFastTransfer, effectiveFeeBps]);
 
   // Fetch quotes
   const { quotes, bestQuote, isLoading: quotesLoading, error: quoteError } =
@@ -129,7 +135,8 @@ export function BridgeCard() {
     fromToken,
     toToken,
     parsedAmount,
-    recipient
+    recipient,
+    effectiveFeeBps
   );
 
   // Record to history when a new bridge tx is submitted
@@ -330,6 +337,27 @@ export function BridgeCard() {
               {selfRecipient || "Connect wallet"}
             </p>
           )}
+        </div>
+
+        {/* Promo Code */}
+        <div className="rounded-2xl bg-[var(--card-hover)] border border-[var(--border)] px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[var(--muted)]">Promo Code</span>
+            {promoCode.trim() && (
+              <span className={cn("text-xs font-medium", isPromoValid ? "text-emerald-400" : "text-red-400")}>
+                {isPromoValid ? "Fee waived" : "Invalid code"}
+              </span>
+            )}
+          </div>
+          <input
+            type="text"
+            value={promoCode}
+            onChange={(e) => setPromoCode(e.target.value)}
+            placeholder="Enter promo code (optional)"
+            spellCheck={false}
+            autoComplete="off"
+            className="w-full bg-transparent text-sm text-white placeholder:text-[var(--muted)]/50 outline-none"
+          />
         </div>
 
         {/* Routes */}

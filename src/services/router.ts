@@ -51,10 +51,12 @@ export async function getQuotes(params: BridgeParams): Promise<BridgeQuote[]> {
     }
   }
 
-  // Sort by output amount (highest first), then by estimated time (fastest first)
+  // Sort by total fee (lowest first = best value), then by estimated time (fastest first)
   quotes.sort((a, b) => {
-    const outputDiff = Number(b.outputAmount - a.outputAmount);
-    if (outputDiff !== 0) return outputDiff;
+    const totalFeeA = a.inputAmount - a.outputAmount;
+    const totalFeeB = b.inputAmount - b.outputAmount;
+    const feeDiff = Number(totalFeeA - totalFeeB);
+    if (feeDiff !== 0) return feeDiff;
     return a.estimatedTime - b.estimatedTime;
   });
 
