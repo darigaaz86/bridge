@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { CHAIN_CONFIG } from "@/config/chains";
-import { PROVIDER_NAMES } from "@/config/constants";
-import { useBridgeSettings } from "@/contexts/BridgeSettingsContext";
+import { PROVIDER_NAMES, HISTORY_STATUS_POLL_INTERVAL_MS } from "@/config/constants";
 import { formatAmount, shortenAddress, cn } from "@/lib/utils";
 import { getAdapter } from "@/services/router";
 import type { BridgeHistoryEntry } from "@/lib/bridgeHistory";
@@ -40,7 +39,6 @@ const STATUS_STYLE: Record<
 };
 
 export function BridgeHistoryItem({ entry, onStatusUpdate }: BridgeHistoryItemProps) {
-  const { settings } = useBridgeSettings();
   const [expanded, setExpanded] = useState(false);
   const [liveStatus, setLiveStatus] = useState<TransactionStatus | null>(null);
   const adapter = getAdapter(entry.provider);
@@ -88,9 +86,9 @@ export function BridgeHistoryItem({ entry, onStatusUpdate }: BridgeHistoryItemPr
   useEffect(() => {
     if (entry.status !== "pending" || !adapter) return;
     fetchStatus();
-    const interval = setInterval(fetchStatus, settings.historyStatusPollIntervalMs);
+    const interval = setInterval(fetchStatus, HISTORY_STATUS_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [entry.status, adapter, fetchStatus, settings.historyStatusPollIntervalMs]);
+  }, [entry.status, adapter, fetchStatus]);
 
   // Fetch live status when expanded (so details show up)
   useEffect(() => {

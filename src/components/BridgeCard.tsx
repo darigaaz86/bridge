@@ -14,8 +14,8 @@ import { useBridgeQuote } from "@/hooks/useBridgeQuote";
 import { useBridgeTransaction } from "@/hooks/useBridgeTransaction";
 import { useBridgeHistory } from "@/hooks/useBridgeHistory";
 import { useTokenAllowance } from "@/hooks/useTokenAllowance";
-import { useBridgeSettings } from "@/contexts/BridgeSettingsContext";
 import { useTronLink } from "@/contexts/TronLinkContext";
+import { DEFAULT_SLIPPAGE_BPS, PLATFORM_FEE_BPS } from "@/config/constants";
 import { TRON_CHAIN_ID } from "@/config/chains";
 import { getTokenAddressEVM, getTokensForChain } from "@/config/tokens";
 import { getAdapter } from "@/services/router";
@@ -25,7 +25,6 @@ import { mainnet, arbitrum } from "wagmi/chains";
 export function BridgeCard() {
   const { address, isConnected } = useAccount();
   const { addEntry } = useBridgeHistory();
-  const { settings, openSettings } = useBridgeSettings();
   const lastRecordedTxRef = useRef<string | null>(null);
 
   // Bridge state (CCTP default speed synced from settings)
@@ -35,7 +34,7 @@ export function BridgeCard() {
   const [toToken, setToToken] = useState("USDC");
   const [amount, setAmount] = useState("");
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
-  const [preferFastTransfer, setPreferFastTransfer] = useState(settings.cctpDefaultFast);
+  const [preferFastTransfer, setPreferFastTransfer] = useState(false);
 
   const { tronAddress, isTronConnected, isTronAvailable, connectTron, disconnectTron } = useTronLink();
   const [customRecipient, setCustomRecipient] = useState("");
@@ -44,10 +43,6 @@ export function BridgeCard() {
   const recipient = useCustomRecipient && customRecipient.trim() ? customRecipient.trim() : selfRecipient;
   const sender = fromChain === TRON_CHAIN_ID ? tronAddress : address;
   const isSenderConnected = fromChain === TRON_CHAIN_ID ? isTronConnected : isConnected;
-
-  useEffect(() => {
-    setPreferFastTransfer(settings.cctpDefaultFast);
-  }, [settings.cctpDefaultFast]);
 
   // Default to USDT when Tron is selected (Tron only supports USDT)
   useEffect(() => {
@@ -80,11 +75,11 @@ export function BridgeCard() {
       fromToken,
       toToken,
       amount: parsedAmount,
-      slippageBps: settings.slippageBps,
-      platformFeeBps: settings.platformFeeBps,
+      slippageBps: DEFAULT_SLIPPAGE_BPS,
+      platformFeeBps: PLATFORM_FEE_BPS,
       preferFastTransfer,
     };
-  }, [fromChain, toChain, fromToken, toToken, parsedAmount, preferFastTransfer, settings.slippageBps, settings.platformFeeBps]);
+  }, [fromChain, toChain, fromToken, toToken, parsedAmount, preferFastTransfer]);
 
   // Fetch quotes
   const { quotes, bestQuote, isLoading: quotesLoading, error: quoteError } =
@@ -215,32 +210,6 @@ export function BridgeCard() {
         {/* Header */}
         <div className="flex items-center justify-between pb-1">
           <h2 className="text-xl font-semibold text-white tracking-tight">Bridge</h2>
-          <button
-            type="button"
-            onClick={openSettings}
-            className="p-1.5 rounded-lg hover:bg-[var(--card-hover)] transition-colors text-[var(--muted)] hover:text-white"
-            title="Bridge settings"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-          </button>
         </div>
 
         {/* FROM Section */}

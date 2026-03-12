@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { getAdapter } from "@/services/router";
 import type { TransactionStatus, BridgeProvider } from "@/services/types";
-import { useBridgeSettings } from "@/contexts/BridgeSettingsContext";
+import { STATUS_POLL_INTERVAL } from "@/config/constants";
 
 export function useTransactionStatus(
   txHash: string | undefined,
@@ -12,7 +12,6 @@ export function useTransactionStatus(
   toChain: number | undefined,
   options?: { depositAddress?: string; depositMemo?: string }
 ) {
-  const { settings } = useBridgeSettings();
   const [status, setStatus] = useState<TransactionStatus>({ state: "idle" });
 
   const checkStatus = useCallback(async () => {
@@ -39,10 +38,10 @@ export function useTransactionStatus(
     checkStatus();
 
     // Poll for updates (interval from settings)
-    const interval = setInterval(checkStatus, settings.statusPollIntervalMs);
+    const interval = setInterval(checkStatus, STATUS_POLL_INTERVAL);
 
     return () => clearInterval(interval);
-  }, [txHash, provider, checkStatus, settings.statusPollIntervalMs]);
+  }, [txHash, provider, checkStatus]);
 
   // Stop polling when done or failed
   useEffect(() => {
