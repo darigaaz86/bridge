@@ -2,6 +2,7 @@ import {
   CCTP_TOKEN_MESSENGER_V2,
   CCTP_DOMAIN_IDS,
   CCTP_IRIS_API,
+  AGGREGATOR_CONTRACTS,
 } from "@/config/contracts";
 import { CHAIN_CONFIG } from "@/config/chains";
 import { PROVIDER_NAMES } from "@/config/constants";
@@ -159,7 +160,7 @@ class CCTPAdapter implements IBridgeAdapter {
   }
 
   getApprovalAddress(fromChain: number): `0x${string}` | undefined {
-    return CCTP_TOKEN_MESSENGER_V2[fromChain];
+    return AGGREGATOR_CONTRACTS[fromChain];
   }
 
   async getStatus(

@@ -2,6 +2,7 @@ import {
   NEAR_INTENTS_QUOTE_URL,
   NEAR_INTENTS_STATUS_URL,
   NEAR_INTENTS_DEPOSIT_SUBMIT_URL,
+  AGGREGATOR_CONTRACTS,
 } from "@/config/contracts";
 import { CHAIN_CONFIG, TRON_CHAIN_ID } from "@/config/chains";
 import { PLATFORM_FEE_BPS, PROVIDER_NAMES, DEFAULT_SLIPPAGE_BPS, APP_FEE_RECIPIENT } from "@/config/constants";
@@ -188,9 +189,8 @@ class NearIntentsAdapter implements IBridgeAdapter {
     }
   }
 
-  getApprovalAddress(_fromChain: number): `0x${string}` | undefined {
-    // NEAR Intents: user sends tokens to deposit address via transfer(); no approval spender
-    return undefined;
+  getApprovalAddress(fromChain: number): `0x${string}` | undefined {
+    return AGGREGATOR_CONTRACTS[fromChain];
   }
 
   /**

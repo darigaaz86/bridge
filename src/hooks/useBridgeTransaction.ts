@@ -7,20 +7,19 @@ import {
   useAccount,
   usePublicClient,
 } from "wagmi";
-import { pad } from "viem";
+import { pad, encodeAbiParameters } from "viem";
 import { ERC20_ABI } from "@/abi/erc20";
-import { TOKEN_MESSENGER_V2_ABI } from "@/abi/tokenMessengerV2";
+import { AGGREGATOR_ABI } from "@/abi/aggregator";
 import { OFT_ABI } from "@/abi/oft";
 import { getTokenAddress, getTokenAddressEVM } from "@/config/tokens";
 import { TRON_CHAIN_ID } from "@/config/chains";
 import { useTronLink } from "@/contexts/TronLinkContext";
 import {
-  CCTP_TOKEN_MESSENGER_V2,
   CCTP_DOMAIN_IDS,
   CCTP_FORWARDING_SERVICE_HOOK_DATA,
 } from "@/config/contracts";
 import { USDT0_OFT_CONTRACTS, LZ_ENDPOINT_IDS } from "@/config/contracts";
-import { getAdapter } from "@/services/router";
+import { AGGREGATOR_CONTRACTS, PROVIDER_IDS } from "@/config/contracts";
 import { nearIntentsAdapter } from "@/services/nearIntents";
 import type { BridgeQuote, TransactionState } from "@/services/types";
 
@@ -66,30 +65,28 @@ export function useBridgeTransaction(
       setState("approving");
       setError(null);
 
-      // NEAR Intents: no approval step; user sends tokens to deposit address via transfer()
-      if (quote.provider === "near-intents") {
+      // Tron NEAR Intents: no EVM approval needed (Tron uses TronWeb directly)
+      if (quote.provider === "near-intents" && fromChain === TRON_CHAIN_ID) {
         setState("approved");
         return;
       }
 
       // Switch to source chain if needed (EVM only)
-      if (fromChain !== TRON_CHAIN_ID) {
-        await switchChainAsync({ chainId: fromChain });
-      }
+      await switchChainAsync({ chainId: fromChain });
 
       const tokenAddress = getTokenAddressEVM(fromToken, fromChain);
-      const adapter = getAdapter(quote.provider);
-      const spender = adapter?.getApprovalAddress(fromChain);
+      // All EVM providers now approve to the aggregator contract
+      const spender = AGGREGATOR_CONTRACTS[fromChain];
 
       if (!tokenAddress || !spender) {
-        throw new Error("Missing token or spender address");
+        throw new Error("Missing token or aggregator address");
       }
 
       // CCTP with forwarding: approve total to burn (outputAmount + bridge fee)
       const approveAmount =
         quote.provider === "cctp" ? quote.inputAmount : amount;
 
-      // Skip approve tx if allowance is already sufficient (e.g. previous approval or reset to 0 not done)
+      // Skip approve tx if allowance is already sufficient
       if (publicClient) {
         const currentAllowance = await publicClient.readContract({
           address: tokenAddress,
@@ -103,7 +100,7 @@ export function useBridgeTransaction(
         }
       }
 
-      const hash = await writeContractAsync({
+      await writeContractAsync({
         address: tokenAddress,
         abi: ERC20_ABI,
         functionName: "approve",
@@ -111,7 +108,6 @@ export function useBridgeTransaction(
         chainId: fromChain,
       });
 
-      // Wait for approval tx to confirm
       setState("approved");
     } catch (err: unknown) {
       const errorMessage =
@@ -148,34 +144,41 @@ export function useBridgeTransaction(
       switch (quote.provider) {
         case "cctp": {
           const tokenAddress = getTokenAddressEVM("USDC", fromChain);
-          const messenger = CCTP_TOKEN_MESSENGER_V2[fromChain];
+          const aggregator = AGGREGATOR_CONTRACTS[fromChain];
           const destDomain = CCTP_DOMAIN_IDS[toChain];
 
-          if (!tokenAddress || !messenger || destDomain === undefined) {
+          if (!tokenAddress || !aggregator || destDomain === undefined) {
             throw new Error("CCTP not supported for this route");
           }
 
           const recipientBytes32 = pad(recipient as `0x${string}`, { size: 32 });
-          const destinationCaller =
-            "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
           const totalToBurn = quote.inputAmount;
           const maxFee = quote.bridgeFee;
-          // Fast Transfer: 1000 (~20–60s, protocol fee). Standard: 2000 (~15m+, no protocol fee)
           const minFinalityThreshold = quote.cctpFast ? 1000 : 2000;
 
+          // Encode CCTP provider data: (uint32 destDomain, bytes32 mintRecipient, uint256 maxFee, uint32 minFinalityThreshold, bytes hookData)
+          const providerData = encodeAbiParameters(
+            [
+              { type: "uint32" },
+              { type: "bytes32" },
+              { type: "uint256" },
+              { type: "uint32" },
+              { type: "bytes" },
+            ],
+            [destDomain, recipientBytes32, maxFee, minFinalityThreshold, CCTP_FORWARDING_SERVICE_HOOK_DATA]
+          );
+
           hash = await writeContractAsync({
-            address: messenger,
-            abi: TOKEN_MESSENGER_V2_ABI,
-            functionName: "depositForBurnWithHook",
+            address: aggregator,
+            abi: AGGREGATOR_ABI,
+            functionName: "bridge",
             args: [
-              totalToBurn,
-              destDomain,
-              recipientBytes32,
+              PROVIDER_IDS.cctp,
               tokenAddress,
-              destinationCaller,
-              maxFee,
-              minFinalityThreshold,
-              CCTP_FORWARDING_SERVICE_HOOK_DATA,
+              totalToBurn,
+              BigInt(toChain),
+              recipientBytes32,
+              providerData,
             ],
             chainId: fromChain,
           });
@@ -184,27 +187,31 @@ export function useBridgeTransaction(
 
         case "usdt0": {
           const oftContract = USDT0_OFT_CONTRACTS[fromChain];
+          const aggregator = AGGREGATOR_CONTRACTS[fromChain];
           const dstEid = LZ_ENDPOINT_IDS[toChain];
 
-          if (!oftContract || !dstEid) {
+          if (!oftContract || !aggregator || !dstEid) {
             throw new Error("USDT0 OFT not supported for this route");
           }
 
           const recipientBytes32 = pad(recipient as `0x${string}`, { size: 32 });
+          const minAmountLD = (amount * 995n) / 1000n; // 0.5% slippage
+          const extraOptions = "0x" as `0x${string}`;
+          const composeMsg = "0x" as `0x${string}`;
+          const oftCmd = "0x" as `0x${string}`;
 
+          // Quote the LayerZero fee from the OFT contract (still needed for msg.value)
           const sendParam = {
             dstEid,
             to: recipientBytes32,
             amountLD: amount,
-            minAmountLD: (amount * 995n) / 1000n, // 0.5% slippage
-            extraOptions: "0x" as `0x${string}`,
-            composeMsg: "0x" as `0x${string}`,
-            oftCmd: "0x" as `0x${string}`,
+            minAmountLD,
+            extraOptions,
+            composeMsg,
+            oftCmd,
           };
 
-          // Get exact LayerZero fee from contract so send() doesn't revert (insufficient fee)
           let nativeFee: bigint;
-          let lzTokenFee: bigint;
           if (publicClient) {
             try {
               const msgFee = await publicClient.readContract({
@@ -214,25 +221,39 @@ export function useBridgeTransaction(
                 args: [sendParam, false],
               }) as { nativeFee: bigint; lzTokenFee: bigint };
               nativeFee = msgFee.nativeFee;
-              lzTokenFee = msgFee.lzTokenFee ?? 0n;
-            } catch (e) {
+            } catch {
               throw new Error(
                 "Could not get USDT0 bridge fee. Ensure you have enough native token (ETH) for gas and the LayerZero fee."
               );
             }
           } else {
             nativeFee = 100000000000000n;
-            lzTokenFee = 0n;
           }
 
+          // Encode USDT0 provider data: (uint32 dstEid, bytes32 recipient, uint256 minAmountLD, bytes extraOptions, bytes composeMsg, bytes oftCmd)
+          const providerData = encodeAbiParameters(
+            [
+              { type: "uint32" },
+              { type: "bytes32" },
+              { type: "uint256" },
+              { type: "bytes" },
+              { type: "bytes" },
+              { type: "bytes" },
+            ],
+            [dstEid, recipientBytes32, minAmountLD, extraOptions, composeMsg, oftCmd]
+          );
+
           hash = await writeContractAsync({
-            address: oftContract,
-            abi: OFT_ABI,
-            functionName: "send",
+            address: aggregator,
+            abi: AGGREGATOR_ABI,
+            functionName: "bridge",
             args: [
-              sendParam,
-              { nativeFee, lzTokenFee },
-              address!, // EVM-only path; sender already validated
+              PROVIDER_IDS.usdt0,
+              oftContract,
+              amount,
+              BigInt(toChain),
+              recipientBytes32,
+              providerData,
             ],
             value: nativeFee,
             chainId: fromChain,
@@ -242,7 +263,7 @@ export function useBridgeTransaction(
 
         case "near-intents": {
           if (fromChain === TRON_CHAIN_ID) {
-            // Tron: use TronWeb to send TRC20 transfer to deposit address
+            // Tron: use TronWeb to send TRC20 transfer to deposit address (no aggregator on Tron)
             if (!window.tronWeb?.contract) {
               throw new Error("TronLink not ready. Please refresh and connect TronLink.");
             }
@@ -269,7 +290,6 @@ export function useBridgeTransaction(
             const amountStr = execQuote.amountIn.toString();
             const toAddr = execQuote.depositAddress;
 
-            // Try high-level contract API (await contract() – TronWeb returns Promise in some versions)
             let txResult: { transaction?: string; txid?: string } | string | null = null;
             try {
               const factory = await Promise.resolve(tw.contract(
@@ -305,7 +325,7 @@ export function useBridgeTransaction(
                 txResult = tx as { transaction?: string; txid?: string };
               }
             } catch {
-              // Fallback: triggerSmartContract + sign + sendRawTransaction (works across TronLink versions)
+              // Fallback: triggerSmartContract + sign + sendRawTransaction
             }
             if (!txResult && tw.transactionBuilder?.triggerSmartContract && tw.trx?.sign && tw.trx?.sendRawTransaction) {
               const functionSelector = "transfer(address,uint256)";
@@ -338,7 +358,13 @@ export function useBridgeTransaction(
               // Non-fatal
             }
           } else {
+            // EVM NEAR Intents: get deposit address, then route through aggregator
             await switchChainAsync({ chainId: fromChain });
+            const aggregator = AGGREGATOR_CONTRACTS[fromChain];
+            if (!aggregator) {
+              throw new Error("Aggregator not configured for this chain");
+            }
+
             const execQuote = await nearIntentsAdapter.getExecutionQuote({
               fromChain,
               toChain,
@@ -356,21 +382,33 @@ export function useBridgeTransaction(
             });
             setNearIntentsDepositAddress(execQuote.depositAddress);
             setNearIntentsDepositMemo(execQuote.depositMemo ?? undefined);
+
             const tokenAddress = getTokenAddressEVM(fromToken, fromChain);
             if (!tokenAddress) throw new Error("Unsupported token for this chain");
-            console.log("[NEAR Intents] EVM transfer", {
-              token: tokenAddress,
-              to: execQuote.depositAddress,
-              amount: execQuote.amountIn.toString(),
-              chainId: fromChain,
-            });
+
+            const recipientBytes32 = pad(recipient as `0x${string}`, { size: 32 });
+
+            // Encode NEAR Intents provider data: (address depositAddress)
+            const providerData = encodeAbiParameters(
+              [{ type: "address" }],
+              [execQuote.depositAddress as `0x${string}`]
+            );
+
             hash = await writeContractAsync({
-              address: tokenAddress,
-              abi: ERC20_ABI,
-              functionName: "transfer",
-              args: [execQuote.depositAddress as `0x${string}`, execQuote.amountIn],
+              address: aggregator,
+              abi: AGGREGATOR_ABI,
+              functionName: "bridge",
+              args: [
+                PROVIDER_IDS["near-intents"],
+                tokenAddress,
+                execQuote.amountIn,
+                BigInt(toChain),
+                recipientBytes32,
+                providerData,
+              ],
               chainId: fromChain,
             });
+
             try {
               await nearIntentsAdapter.submitDepositTx(
                 hash,

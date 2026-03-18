@@ -2,6 +2,7 @@ import {
   USDT0_OFT_CONTRACTS,
   LZ_ENDPOINT_IDS,
   LZ_SCAN_API,
+  AGGREGATOR_CONTRACTS,
 } from "@/config/contracts";
 import { CHAIN_CONFIG } from "@/config/chains";
 import { PROVIDER_NAMES } from "@/config/constants";
@@ -84,7 +85,7 @@ class USDT0Adapter implements IBridgeAdapter {
   }
 
   getApprovalAddress(fromChain: number): `0x${string}` | undefined {
-    return USDT0_OFT_CONTRACTS[fromChain];
+    return AGGREGATOR_CONTRACTS[fromChain];
   }
 
   async getStatus(

@@ -9,7 +9,7 @@ import { useBridgeHistory } from "@/hooks/useBridgeHistory";
 
 export default function HistoryPage() {
   const { address, isConnected } = useAccount();
-  const { history, updateEntry, refreshFromStorage } = useBridgeHistory();
+  const { history, refreshFromStorage } = useBridgeHistory();
 
   return (
     <div className="min-h-screen gradient-bg">
@@ -62,13 +62,6 @@ export default function HistoryPage() {
               <BridgeHistoryItem
                 key={entry.id}
                 entry={entry}
-                onStatusUpdate={(id, updates) =>
-                  updateEntry(id, {
-                    status: updates.status,
-                    destinationTxHash: updates.destinationTxHash,
-                    failureMessage: updates.failureMessage,
-                  })
-                }
               />
             ))}
           </div>

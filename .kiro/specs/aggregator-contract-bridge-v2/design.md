@@ -8,7 +8,7 @@ QoreBridge v2 replaces the server-backed architecture with three decoupled compo
 
 2. **Bridge Provider Contracts** — Small Solidity contracts (one per protocol) implementing the `IBridgeProvider` interface. Each handles the protocol-specific logic: `CctpProvider` calls TokenMessengerV2, `Usdt0Provider` calls OFT.send(), `NearIntentsProvider` transfers to a deposit address. Providers manage their own approvals to protocol contracts.
 
-2. **Indexer Service** — A lightweight Node.js service that listens to `BridgeInitiated` events across all chains, polls downstream status APIs (Circle Iris, LayerZero Scan, NEAR 1Click), and exposes a read-only REST API for bridge history.
+2. **Indexer Service** — A lightweight Go service that listens to `BridgeInitiated` events across all chains, polls downstream status APIs (Circle Iris, LayerZero Scan, NEAR 1Click), and exposes a read-only REST API for bridge history.
 
 3. **Static Frontend** — The existing Next.js app converted to a pure static export. It calls the Aggregator Contract instead of protocols directly, reads history from the Indexer API, and has zero server-side dependencies.
 
@@ -264,52 +264,57 @@ contract NearIntentsProvider is IBridgeProvider {
 }
 ```
 
-### 2. Indexer Service (Node.js/TypeScript)
+### 2. Indexer Service (Go)
 
-```typescript
-// Core interfaces for the indexer service
+```go
+// Core types for the indexer service
 
-interface IndexedBridgeEvent {
-  nonce: number;
-  txHash: string;
-  blockNumber: number;
-  timestamp: number;
-  chainId: number;
-  sender: string;
-  recipient: string;       // bytes32 hex
-  sourceChainId: number;
-  destinationChainId: number;
-  token: string;
-  amount: string;          // bigint as string
-  platformFee: string;     // bigint as string
-  provider: "cctp" | "usdt0" | "near-intents";
-  providerData: string;    // hex-encoded
-  // Status tracking
-  status: "pending" | "done" | "failed";
-  destinationTxHash?: string;
-  failureMessage?: string;
-  lastPolledAt?: number;
+// IndexedBridgeEvent represents a bridge event indexed from on-chain BridgeInitiated events.
+type IndexedBridgeEvent struct {
+    Nonce              int64  `json:"nonce" db:"nonce"`
+    TxHash             string `json:"txHash" db:"tx_hash"`
+    BlockNumber        int64  `json:"blockNumber" db:"block_number"`
+    Timestamp          int64  `json:"timestamp" db:"timestamp"`
+    ChainID            int64  `json:"chainId" db:"chain_id"`
+    Sender             string `json:"sender" db:"sender"`
+    Recipient          string `json:"recipient" db:"recipient"`             // bytes32 hex
+    SourceChainID      int64  `json:"sourceChainId" db:"source_chain_id"`
+    DestinationChainID int64  `json:"destinationChainId" db:"destination_chain_id"`
+    Token              string `json:"token" db:"token"`
+    Amount             string `json:"amount" db:"amount"`                   // big.Int as string
+    PlatformFee        string `json:"platformFee" db:"platform_fee"`        // big.Int as string
+    Provider           string `json:"provider" db:"provider"`               // "cctp" | "usdt0" | "near-intents"
+    ProviderData       string `json:"providerData" db:"provider_data"`      // hex-encoded
+    Status             string `json:"status" db:"status"`                   // "pending" | "done" | "failed"
+    DestinationTxHash  string `json:"destinationTxHash,omitempty" db:"destination_tx_hash"`
+    FailureMessage     string `json:"failureMessage,omitempty" db:"failure_message"`
+    LastPolledAt       *int64 `json:"lastPolledAt,omitempty" db:"last_polled_at"`
 }
 
-interface IndexerConfig {
-  chains: {
-    chainId: number;
-    rpcUrl: string;
-    aggregatorAddress: string;
-    startBlock: number;
-  }[];
-  pollIntervalMs: number;       // default 10000
-  statusPollIntervalMs: number; // default 10000
+// ChainConfig holds per-chain configuration for the indexer.
+type ChainConfig struct {
+    ChainID            int64  `json:"chainId"`
+    RPCURL             string `json:"rpcUrl"`
+    AggregatorAddress  string `json:"aggregatorAddress"`
+    StartBlock         int64  `json:"startBlock"`
+}
+
+// IndexerConfig holds the full indexer configuration.
+type IndexerConfig struct {
+    Chains              []ChainConfig `json:"chains"`
+    PollInterval        time.Duration // default 10s
+    StatusPollInterval  time.Duration // default 10s
 }
 ```
 
 **Components:**
-- **EventListener**: Uses `ethers.js` or `viem` to subscribe to `BridgeInitiated` logs on each chain. Persists last processed block per chain for crash recovery.
-- **StatusPoller**: Iterates pending transactions, calls the appropriate downstream API based on provider, updates status.
-- **REST API**: Express.js or Hono server with endpoints:
+- **EventListener**: Uses `go-ethereum` (`ethclient`) to subscribe to `BridgeInitiated` logs on each chain via `FilterLogs` / `SubscribeFilterLogs`. Persists last processed block per chain for crash recovery.
+- **StatusPoller**: Iterates pending transactions, calls the appropriate downstream API based on provider using `net/http`, updates status.
+- **REST API**: `net/http` (stdlib) or `chi` router with endpoints:
   - `GET /api/history?address={addr}&limit={n}&offset={n}` — list by wallet
   - `GET /api/history/{txHash}` — single entry by tx hash
   - CORS enabled for all origins
+- **Storage**: SQLite via `mattn/go-sqlite3` or `modernc.org/sqlite` (CGo-free)
 
 ### 3. Frontend Changes
 
@@ -587,16 +592,16 @@ Property tests to implement:
 - Property 11: Unregistered or disabled provider — fuzz unregistered provider IDs, verify revert; fuzz disabled provider IDs, verify revert
 - Property 12: Pause — fuzz bridge calls while paused, verify revert
 
-### Indexer Service Testing (Node.js)
+### Indexer Service Testing (Go)
 
-**Unit Tests (Vitest):**
+**Unit Tests (`go test`):**
 - Test event parsing from raw log data
 - Test status mapping from downstream API responses
 - Test REST API response format and filtering
 - Test pagination logic
 
-**Property-Based Tests (fast-check):**
-`fast-check` is the property-based testing library for the indexer.
+**Property-Based Tests (`rapid`):**
+`rapid` (pgregory.net/rapid) is the property-based testing library for the Go indexer.
 
 - Minimum 100 iterations per property
 - Each test tagged: `// Feature: aggregator-contract-bridge-v2, Property N: {property_text}`

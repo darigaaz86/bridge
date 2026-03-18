@@ -80,3 +80,10 @@ ehthumbs.db
 # Optional: local static export or backups (uncomment if you generate these)
 # out/
 # backup/
+
+# Contracts (Foundry)
+contracts/lib/
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+indexer/indexer-bin

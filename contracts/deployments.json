@@ -1,0 +1,16 @@
+{
+  "salt": "0x716f72656272696467652d763200000000000000000000000000000000000000",
+  "contracts": {
+    "QoreBridgeAggregator": "0x039dBEf1513016dD84DE9CE4fd98329631e58168",
+    "CctpProvider": "0x1241139ac8623021E0d2CaDa7be524ACb4766FC3",
+    "NearIntentsProvider": "0xDBC94513c6ff15F1E2305f38ff41cc41fCb83542",
+    "Usdt0Provider": null
+  },
+  "chains": {
+    "11155111": {
+      "name": "Ethereum Sepolia",
+      "deployTx": "0x39b218d789e477093cfd6398f95a2427d02d8c75b4074de82c2d83eb100ba104",
+      "deployBlock": 10467272
+    }
+  }
+}

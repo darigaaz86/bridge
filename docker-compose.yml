@@ -1,30 +1,14 @@
 services:
-  nginx:
-    image: nginx:alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    depends_on:
-      - app
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - /etc/nginx/ssl:/etc/nginx/ssl:ro
-
   app:
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    expose:
-      - "3000"
-    depends_on:
-      db:
-        condition: service_healthy
+    ports:
+      - "3000:80"
     environment:
-      DATABASE_URL: postgresql://qorebridge:${POSTGRES_PASSWORD:-changeme}@db:5432/qorebridge
       NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:-}
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://qore-bridge.qore3.com}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
       NEXT_PUBLIC_INDEXER_API_URL: ${NEXT_PUBLIC_INDEXER_API_URL:-http://localhost:8080}
       NEXT_PUBLIC_AGGREGATOR_ETHEREUM: ${NEXT_PUBLIC_AGGREGATOR_ETHEREUM:-}
       NEXT_PUBLIC_AGGREGATOR_ARBITRUM: ${NEXT_PUBLIC_AGGREGATOR_ARBITRUM:-}
@@ -32,6 +16,23 @@ services:
       NEXT_PUBLIC_AGGREGATOR_OPTIMISM: ${NEXT_PUBLIC_AGGREGATOR_OPTIMISM:-}
       NEXT_PUBLIC_AGGREGATOR_POLYGON: ${NEXT_PUBLIC_AGGREGATOR_POLYGON:-}
       NEXT_PUBLIC_AGGREGATOR_AVALANCHE: ${NEXT_PUBLIC_AGGREGATOR_AVALANCHE:-}
+
+  indexer:
+    build:
+      context: ./indexer
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgresql://qorebridge:${POSTGRES_PASSWORD:-changeme}@db:5432/qorebridge?sslmode=disable
+      CHAINS: ${CHAINS:-[]}
+      POLL_INTERVAL: ${POLL_INTERVAL:-10}
+      STATUS_POLL_INTERVAL: ${STATUS_POLL_INTERVAL:-10}
+      API_PORT: ${API_PORT:-8080}
+    depends_on:
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:16-alpine
@@ -42,7 +43,6 @@ services:
       POSTGRES_DB: qorebridge
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5432:5432"
     healthcheck:

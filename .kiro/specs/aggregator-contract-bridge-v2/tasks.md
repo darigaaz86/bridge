@@ -6,21 +6,21 @@ Migrate QoreBridge from a server-backed architecture to a web3-native architectu
 
 ## Tasks
 
-- [ ] 1. Set up Foundry project and core interfaces
-  - [ ] 1.1 Initialize Foundry project structure
+- [x] 1. Set up Foundry project and core interfaces
+  - [x] 1.1 Initialize Foundry project structure
     - Create `contracts/` directory with `foundry.toml`, `remappings.txt`
     - Install OpenZeppelin contracts dependency (`forge install OpenZeppelin/openzeppelin-contracts`)
     - Create `contracts/src/interfaces/IBridgeProvider.sol` with the `executeBridge` function signature
     - _Requirements: 2.7_
 
-  - [ ] 1.2 Create mock contracts for testing
+  - [x] 1.2 Create mock contracts for testing
     - Create `contracts/test/mocks/MockERC20.sol` (mintable ERC20 for testing)
     - Create `contracts/test/mocks/MockTokenMessengerV2.sol` (records calls to `depositForBurnWithHook`)
     - Create `contracts/test/mocks/MockOFT.sol` (records calls to `send`, accepts msg.value)
     - _Requirements: 4.1, 5.1, 6.1_
 
 - [ ] 2. Implement QoreBridgeAggregator contract
-  - [ ] 2.1 Implement aggregator core with fee collection and provider registry
+  - [x] 2.1 Implement aggregator core with fee collection and provider registry
     - Create `contracts/src/QoreBridgeAggregator.sol`
     - Inherit Ownable, ReentrancyGuard, Pausable from OpenZeppelin
     - Implement constructor(owner, treasury, feeBps)
@@ -88,20 +88,20 @@ Migrate QoreBridge from a server-backed architecture to a web3-native architectu
     - **Property 12: Pause halts all bridge operations**
     - **Validates: Requirements 14.4, 14.5**
 
-- [ ] 3. Implement Bridge Provider contracts
-  - [ ] 3.1 Implement CctpProvider
+- [x] 3. Implement Bridge Provider contracts
+  - [x] 3.1 Implement CctpProvider
     - Create `contracts/src/providers/CctpProvider.sol`
     - Constructor takes tokenMessengerV2 and USDC addresses, grants max approval to tokenMessengerV2
     - Implement `executeBridge`: decode CCTP params, call `depositForBurnWithHook`
     - _Requirements: 4.1, 4.2, 13.4_
 
-  - [ ] 3.2 Implement Usdt0Provider
+  - [x] 3.2 Implement Usdt0Provider
     - Create `contracts/src/providers/Usdt0Provider.sol`
     - Constructor takes OFT contract address
     - Implement `executeBridge`: decode OFT params, call `OFT.send{value: msg.value}`
     - _Requirements: 5.1, 5.2, 13.4_
 
-  - [ ] 3.3 Implement NearIntentsProvider
+  - [x] 3.3 Implement NearIntentsProvider
     - Create `contracts/src/providers/NearIntentsProvider.sol`
     - Implement `executeBridge`: decode deposit address, safeTransfer tokens
     - _Requirements: 6.1_
@@ -113,11 +113,11 @@ Migrate QoreBridge from a server-backed architecture to a web3-native architectu
     - Test revert conditions (invalid token, zero deposit address)
     - _Requirements: 4.1, 4.2, 5.1, 5.2, 6.1_
 
-- [ ] 4. Checkpoint - Smart contracts
+- [x] 4. Checkpoint - Smart contracts
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Create Foundry deployment script
-  - [ ] 5.1 Implement Deploy.s.sol
+- [x] 5. Create Foundry deployment script
+  - [x] 5.1 Implement Deploy.s.sol
     - Create `contracts/script/Deploy.s.sol`
     - Deploy QoreBridgeAggregator with owner, treasury, feeBps
     - Deploy CctpProvider, Usdt0Provider, NearIntentsProvider with chain-specific addresses
@@ -125,37 +125,37 @@ Migrate QoreBridge from a server-backed architecture to a web3-native architectu
     - Read chain-specific config from environment variables
     - _Requirements: 13.1, 13.2, 13.3, 13.5, 13.6_
 
-- [ ] 6. Implement Indexer Service
-  - [ ] 6.1 Set up indexer project structure
-    - Create `indexer/` directory with `package.json`, `tsconfig.json`
-    - Add dependencies: viem (for event listening), hono (for REST API), better-sqlite3 (for storage)
+- [x] 6. Implement Indexer Service
+  - [x] 6.1 Set up indexer project structure
+    - Create `indexer/` directory with `go.mod`, `go.sum`
+    - Add dependencies: go-ethereum (for event listening), net/http or chi (for REST API), modernc.org/sqlite (for storage)
     - Create database schema (bridge_events, indexer_state tables)
     - _Requirements: 8.1, 8.2_
 
-  - [ ] 6.2 Implement event listener
-    - Create `indexer/src/listener.ts`
-    - Subscribe to BridgeInitiated logs on each configured chain using viem
+  - [x] 6.2 Implement event listener
+    - Create `indexer/listener/listener.go`
+    - Subscribe to BridgeInitiated logs on each configured chain using go-ethereum ethclient
     - Parse event data and store in database
     - Track last processed block per chain for crash recovery
     - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
-  - [ ] 6.3 Implement status poller
-    - Create `indexer/src/poller.ts`
+  - [x] 6.3 Implement status poller
+    - Create `indexer/poller/poller.go`
     - Query pending transactions from database
     - Poll Circle Iris API for CCTP, LayerZero Scan for USDT0, NEAR 1Click for NEAR Intents
     - Update status to "done" or "failed" based on downstream response
     - Stop polling terminal-state transactions
     - _Requirements: 9.1, 9.2, 9.3, 9.4_
 
-  - [ ] 6.4 Implement REST API
-    - Create `indexer/src/api.ts`
+  - [x] 6.4 Implement REST API
+    - Create `indexer/api/api.go`
     - `GET /api/history?address={addr}&limit={n}&offset={n}` — filter by sender, sort by timestamp desc, paginate
     - `GET /api/history/{txHash}` — lookup by tx hash
     - Enable CORS for all origins
     - _Requirements: 10.1, 10.2, 10.3, 10.4_
 
-  - [ ] 6.5 Create indexer entry point
-    - Create `indexer/src/index.ts`
+  - [x] 6.5 Create indexer entry point
+    - Create `indexer/cmd/indexer/main.go`
     - Wire together listener, poller, and API server
     - Load config from environment variables (RPC URLs, aggregator addresses, poll intervals)
     - _Requirements: 8.1, 9.4_
@@ -176,22 +176,22 @@ Migrate QoreBridge from a server-backed architecture to a web3-native architectu
     - **Property 16: History API lookup by txHash**
     - **Validates: Requirements 10.2**
 
-- [ ] 7. Checkpoint - Indexer service
+- [x] 7. Checkpoint - Indexer service
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 8. Frontend migration - Configuration and ABI
-  - [ ] 8.1 Add aggregator contract configuration
+- [x] 8. Frontend migration - Configuration and ABI
+  - [x] 8.1 Add aggregator contract configuration
     - Add `AGGREGATOR_CONTRACTS` mapping (chainId → address) to `src/config/contracts.ts`
     - Add `PROVIDER_IDS` constants (keccak256 hashes) to `src/config/contracts.ts`
     - Add `INDEXER_API_URL` env variable to `src/config/contracts.ts`
     - _Requirements: 11.4, 12.2_
 
-  - [ ] 8.2 Add aggregator ABI
+  - [x] 8.2 Add aggregator ABI
     - Create `src/abi/aggregator.ts` with the `bridge()` function ABI and event ABI
     - _Requirements: 11.1_
 
-- [ ] 9. Frontend migration - Bridge transaction hook
-  - [ ] 9.1 Refactor useBridgeTransaction to use aggregator contract
+- [x] 9. Frontend migration - Bridge transaction hook
+  - [x] 9.1 Refactor useBridgeTransaction to use aggregator contract
     - Replace CCTP direct call with `aggregator.bridge(PROVIDER_IDS.cctp, ...)` encoding CCTP params
     - Replace USDT0 direct call with `aggregator.bridge(PROVIDER_IDS.usdt0, ...)` encoding OFT params
     - Replace NEAR Intents direct call with `aggregator.bridge(PROVIDER_IDS["near-intents"], ...)` encoding deposit address
@@ -199,44 +199,44 @@ Migrate QoreBridge from a server-backed architecture to a web3-native architectu
     - Update approval spender to aggregator address for all providers
     - _Requirements: 11.1, 11.2, 11.3_
 
-  - [ ] 9.2 Update router getApprovalAddress
+  - [x] 9.2 Update router getApprovalAddress
     - Modify `src/services/router.ts` and each adapter's `getApprovalAddress` to return the aggregator contract address for the given chain
     - _Requirements: 11.3_
 
-- [ ] 10. Frontend migration - History and server removal
-  - [ ] 10.1 Refactor useBridgeHistory to use indexer API
+- [x] 10. Frontend migration - History and server removal
+  - [x] 10.1 Refactor useBridgeHistory to use indexer API
     - Replace `/api/history` fetch calls with `INDEXER_API_URL/api/history`
     - Remove POST/PATCH calls (indexer populates from on-chain events)
     - Keep localStorage as fallback cache when indexer is unavailable
     - _Requirements: 12.2_
 
-  - [ ] 10.2 Remove server-side dependencies
+  - [x] 10.2 Remove server-side dependencies
     - Delete `src/app/api/` directory (all API route handlers)
     - Delete `src/lib/db.ts` (PostgreSQL connection)
     - Delete `scripts/init-db.sql` (DB schema)
     - Remove `pg` from `package.json` dependencies
     - _Requirements: 12.4, 12.5_
 
-  - [ ] 10.3 Configure static export
+  - [x] 10.3 Configure static export
     - Add `output: "export"` to `next.config.ts`
     - Verify build produces only static files (no Node.js server runtime)
     - Update any dynamic routes to use `generateStaticParams` or remove them
     - _Requirements: 12.1, 12.3_
 
-- [ ] 11. Update deployment configuration
-  - [ ] 11.1 Update docker-compose.yml
+- [x] 11. Update deployment configuration
+  - [x] 11.1 Update docker-compose.yml
     - Remove `db` (PostgreSQL) service
     - Add `indexer` service with environment variables for RPC URLs and aggregator addresses
     - Simplify `app` service to serve static files (or remove if deploying to static host)
     - _Requirements: 12.1_
 
-  - [ ] 11.2 Update environment configuration
+  - [x] 11.2 Update environment configuration
     - Add `NEXT_PUBLIC_INDEXER_API_URL` to `.env.example`
     - Add `NEXT_PUBLIC_AGGREGATOR_*` addresses to `.env.example`
     - Remove `DATABASE_URL` from `.env.example`
     - _Requirements: 11.4, 12.4_
 
-- [ ] 12. Final checkpoint
+- [x] 12. Final checkpoint
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
@@ -244,6 +244,6 @@ Migrate QoreBridge from a server-backed architecture to a web3-native architectu
 - Tasks marked with `*` are optional and can be skipped for faster MVP
 - Each task references specific requirements for traceability
 - Checkpoints ensure incremental validation
-- Property tests validate universal correctness properties using Foundry fuzz (contracts) and fast-check (indexer)
+- Property tests validate universal correctness properties using Foundry fuzz (contracts) and rapid (indexer)
 - Unit tests validate specific examples and edge cases
 - Smart contracts are implemented first since the indexer and frontend depend on the deployed contract ABI and addresses

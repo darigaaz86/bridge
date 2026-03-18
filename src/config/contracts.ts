@@ -89,3 +89,36 @@ export const CCTP_FORWARDING_SERVICE_HOOK_DATA =
 export const CCTP_IRIS_API = "https://iris-api.circle.com/v2";
 // LayerZero Scan API (official docs: scan.layerzero-api.com; old api-mainnet.layerzero-scan.com may return 403)
 export const LZ_SCAN_API = "https://scan.layerzero-api.com/v1";
+
+// ============================================================
+// Aggregator Contract Addresses (per chain)
+// TODO: Update with actual deployed addresses after deployment
+// ============================================================
+
+export const AGGREGATOR_CONTRACTS: Record<number, `0x${string}`> = {
+  [mainnet.id]: "0x0000000000000000000000000000000000000000",
+  [arbitrum.id]: "0x0000000000000000000000000000000000000000",
+  [base.id]: "0x0000000000000000000000000000000000000000",
+  [optimism.id]: "0x0000000000000000000000000000000000000000",
+  [polygon.id]: "0x0000000000000000000000000000000000000000",
+  [avalanche.id]: "0x0000000000000000000000000000000000000000",
+};
+
+// ============================================================
+// Provider IDs (keccak256 hashes of provider name strings)
+// These must match the provider IDs registered in the on-chain
+// Aggregator Contract provider registry.
+// ============================================================
+
+export const PROVIDER_IDS = {
+  cctp: "0xf8455f3379434a3ef6559858314c8f61d36412da9937cd3f1de59562deb078e6" as `0x${string}`,
+  usdt0: "0x6c586b6e10c133cf1ef94fbd023b9480e32c2e41bbd6948212bbf2507d82eba1" as `0x${string}`,
+  "near-intents": "0x3e9fe409e747e9f7a1970485668abf89b634f38b94401f01f39ee3e70e882039" as `0x${string}`,
+} as const;
+
+// ============================================================
+// Indexer Service API
+// ============================================================
+
+export const INDEXER_API_URL =
+  process.env.NEXT_PUBLIC_INDEXER_API_URL || "https://indexer.qorebridge.com";

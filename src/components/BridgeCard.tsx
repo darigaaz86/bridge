@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { parseUnits } from "viem";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -12,7 +12,7 @@ import { FeeBreakdown } from "./FeeBreakdown";
 import { TransactionStatusDisplay } from "./TransactionStatus";
 import { useBridgeQuote } from "@/hooks/useBridgeQuote";
 import { useBridgeTransaction } from "@/hooks/useBridgeTransaction";
-import { useBridgeHistory } from "@/hooks/useBridgeHistory";
+
 import { useTokenAllowance } from "@/hooks/useTokenAllowance";
 import { useTronLink } from "@/contexts/TronLinkContext";
 import { DEFAULT_SLIPPAGE_BPS, PLATFORM_FEE_BPS, VALID_PROMO_CODES } from "@/config/constants";
@@ -24,8 +24,6 @@ import { mainnet, arbitrum } from "wagmi/chains";
 
 export function BridgeCard() {
   const { address, isConnected } = useAccount();
-  const { addEntry } = useBridgeHistory();
-  const lastRecordedTxRef = useRef<string | null>(null);
 
   // Bridge state (CCTP default speed synced from settings)
   const [fromChain, setFromChain] = useState<number>(mainnet.id);
@@ -138,45 +136,6 @@ export function BridgeCard() {
     recipient,
     effectiveFeeBps
   );
-
-  // Record to history when a new bridge tx is submitted
-  useEffect(() => {
-    if (
-      !sourceTxHash ||
-      !selectedQuote ||
-      !address ||
-      lastRecordedTxRef.current === sourceTxHash
-    )
-      return;
-    lastRecordedTxRef.current = sourceTxHash;
-    addEntry({
-      provider: selectedQuote.provider,
-      fromChain,
-      toChain,
-      fromToken,
-      toToken,
-      amount: parsedAmount.toString(),
-      recipient: recipient || address,
-      sourceTxHash,
-      ...(selectedQuote.provider === "near-intents" &&
-        nearIntentsDepositAddress && {
-          depositAddress: nearIntentsDepositAddress,
-          depositMemo: nearIntentsDepositMemo,
-        }),
-    });
-  }, [
-    sourceTxHash,
-    selectedQuote,
-    address,
-    fromChain,
-    toChain,
-    fromToken,
-    toToken,
-    parsedAmount,
-    addEntry,
-    nearIntentsDepositAddress,
-    nearIntentsDepositMemo,
-  ]);
 
   // Swap chains
   const handleSwapChains = () => {

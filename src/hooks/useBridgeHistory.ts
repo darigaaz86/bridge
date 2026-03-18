@@ -2,7 +2,35 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useAccount } from "wagmi";
+import { INDEXER_API_URL } from "@/config/contracts";
 import type { BridgeHistoryEntry } from "@/lib/bridgeHistory";
+
+const CACHE_KEY_PREFIX = "qorebridge_history_";
+
+function cacheKey(address: string): string {
+  return `${CACHE_KEY_PREFIX}${address.toLowerCase()}`;
+}
+
+function loadFromCache(address: string): BridgeHistoryEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(cacheKey(address));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as BridgeHistoryEntry[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveToCache(address: string, entries: BridgeHistoryEntry[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(cacheKey(address), JSON.stringify(entries));
+  } catch {
+    // silent — localStorage may be full or unavailable
+  }
+}
 
 export function useBridgeHistory() {
   const { address } = useAccount();
@@ -14,13 +42,22 @@ export function useBridgeHistory() {
       return;
     }
     try {
-      const res = await fetch(`/api/history?address=${address}`);
+      const res = await fetch(
+        `${INDEXER_API_URL}/api/history?address=${address}`
+      );
       if (res.ok) {
         const data = await res.json();
         setHistory(data);
+        saveToCache(address, data);
+        return;
       }
     } catch {
-      // silent
+      // indexer unavailable — fall through to cache
+    }
+    // Fallback: load from localStorage cache
+    const cached = loadFromCache(address);
+    if (cached.length > 0) {
+      setHistory(cached);
     }
   }, [address]);
 
@@ -28,51 +65,5 @@ export function useBridgeHistory() {
     fetchHistory();
   }, [fetchHistory]);
 
-  const addEntry = useCallback(
-    async (entry: Omit<BridgeHistoryEntry, "id" | "createdAt" | "status">) => {
-      if (!address) return null;
-      try {
-        const res = await fetch("/api/history", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...entry, walletAddress: address }),
-        });
-        if (res.ok) {
-          const added: BridgeHistoryEntry = await res.json();
-          setHistory((prev) => [added, ...prev]);
-          return added;
-        }
-      } catch {
-        // silent
-      }
-      return null;
-    },
-    [address]
-  );
-
-  const updateEntry = useCallback(
-    async (
-      id: string,
-      updates: Partial<
-        Pick<BridgeHistoryEntry, "status" | "destinationTxHash" | "failureMessage">
-      >
-    ) => {
-      if (!address) return;
-      try {
-        await fetch(`/api/history/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updates),
-        });
-        setHistory((prev) =>
-          prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
-        );
-      } catch {
-        // silent
-      }
-    },
-    [address]
-  );
-
-  return { history, addEntry, updateEntry, refreshFromStorage: fetchHistory };
+  return { history, refreshFromStorage: fetchHistory };
 }
