@@ -1,16 +1,36 @@
 {
-  "salt": "0x716f72656272696467652d763200000000000000000000000000000000000000",
-  "contracts": {
-    "QoreBridgeAggregator": "0x039dBEf1513016dD84DE9CE4fd98329631e58168",
-    "CctpProvider": "0x1241139ac8623021E0d2CaDa7be524ACb4766FC3",
-    "NearIntentsProvider": "0xDBC94513c6ff15F1E2305f38ff41cc41fCb83542",
-    "Usdt0Provider": null
+  "mainnet": {
+    "salt": "0x716f72656272696467652d763200000000000000000000000000000000000000",
+    "contracts": {
+      "QoreBridgeAggregator": "0xb63d7256E75bf9c7d0f1828137F557428e594dfC",
+      "CctpProvider": "0x1241139ac8623021E0d2CaDa7be524ACb4766FC3",
+      "Usdt0Provider": "0xF6b8F40B50bb2F6D317516DF77a72081a150e444",
+      "NearIntentsProvider": "0xDBC94513c6ff15F1E2305f38ff41cc41fCb83542"
+    },
+    "owner": "0x752010Bc56F4eCC047C29194c0Ea6604B96CD80A",
+    "treasury": "0x4132d2B7453D44653bA703dA5CB9c1aE0404Bd03",
+    "chains": {
+      "8453": {
+        "name": "Base",
+        "deployTx": "0x3ae4a56b2dfca45a4e7b7e0485bf67a72f3017db70bb8995cb3b819616c581a3",
+        "deployBlock": 43559600
+      }
+    }
   },
-  "chains": {
-    "11155111": {
-      "name": "Ethereum Sepolia",
-      "deployTx": "0x39b218d789e477093cfd6398f95a2427d02d8c75b4074de82c2d83eb100ba104",
-      "deployBlock": 10467272
+  "testnet": {
+    "salt": "0x716f7265627269646765763274657374000000000000000000000000000000",
+    "contracts": {
+      "QoreBridgeAggregator": "0x039dBEf1513016dD84DE9CE4fd98329631e58168",
+      "CctpProvider": "0x1241139ac8623021E0d2CaDa7be524ACb4766FC3",
+      "NearIntentsProvider": "0xDBC94513c6ff15F1E2305f38ff41cc41fCb83542",
+      "Usdt0Provider": null
+    },
+    "chains": {
+      "11155111": {
+        "name": "Ethereum Sepolia",
+        "deployTx": "0x39b218d789e477093cfd6398f95a2427d02d8c75b4074de82c2d83eb100ba104",
+        "deployBlock": 10467272
+      }
     }
   }
 }

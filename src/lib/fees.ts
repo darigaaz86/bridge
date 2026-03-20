@@ -1,12 +1,10 @@
-import { PLATFORM_FEE_BPS } from "@/config/constants";
-
-export function calculatePlatformFee(amount: bigint, feeBps: number = PLATFORM_FEE_BPS): bigint {
+export function calculatePlatformFee(amount: bigint, feeBps: number = 0): bigint {
   return (amount * BigInt(feeBps)) / 10000n;
 }
 
 export function calculateOutputAmount(
   inputAmount: bigint,
-  platformFeeBps: number = PLATFORM_FEE_BPS,
+  platformFeeBps: number = 0,
   bridgeFeeBps: number = 0
 ): { outputAmount: bigint; platformFee: bigint; bridgeFee: bigint } {
   const platformFee = calculatePlatformFee(inputAmount, platformFeeBps);

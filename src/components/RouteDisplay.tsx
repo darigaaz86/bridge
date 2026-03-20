@@ -1,8 +1,6 @@
 "use client";
 
 import { formatAmount, formatTime, cn } from "@/lib/utils";
-import { formatFeeBps } from "@/lib/fees";
-import { PLATFORM_FEE_BPS } from "@/config/constants";
 import type { BridgeQuote } from "@/services/types";
 
 interface RouteDisplayProps {
@@ -94,7 +92,7 @@ export function RouteDisplay({
               </div>
               <div className="text-xs text-[var(--muted)] mt-0.5 flex items-center gap-3">
                 <span>{formatTime(quote.estimatedTime)}</span>
-                <span>Fee: {formatFeeBps(PLATFORM_FEE_BPS)}</span>
+                <span>Fee: {formatAmount(quote.bridgeFee, 6, 4)}</span>
               </div>
             </div>
 

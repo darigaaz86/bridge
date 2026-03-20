@@ -17,6 +17,7 @@ runs = 256
 base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
 arb_sepolia = "${ARB_SEPOLIA_RPC_URL}"
 eth_sepolia = "${ETH_SEPOLIA_RPC_URL}"
+base_mainnet = "${BASE_RPC_URL}"
 
 # Etherscan API keys for contract verification
 [etherscan]

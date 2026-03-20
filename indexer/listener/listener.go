@@ -152,6 +152,10 @@ func runChainListener(ctx context.Context, store *db.DB, chain types.ChainConfig
 	}
 }
 
+// maxBlockRange is the maximum number of blocks to query in a single eth_getLogs call.
+// Public RPCs (e.g. Base) often limit this to 10,000 blocks.
+const maxBlockRange = 5000
+
 // pollEvents fetches new BridgeInitiated logs from the chain and stores them.
 func pollEvents(
 	ctx context.Context,
@@ -179,33 +183,50 @@ func pollEvents(
 		return nil // No new confirmed blocks.
 	}
 
-	query := ethereum.FilterQuery{
-		FromBlock: big.NewInt(*fromBlock),
-		ToBlock:   big.NewInt(int64(confirmedBlock)),
-		Addresses: []common.Address{contractAddr},
-		Topics:    [][]common.Hash{{bridgeInitiatedTopic}},
-	}
+	// Process in chunks to stay within RPC eth_getLogs block range limits.
+	chunkStart := *fromBlock
+	totalEvents := 0
 
-	logs, err := client.FilterLogs(ctx, query)
-	if err != nil {
-		return fmt.Errorf("filter logs: %w", err)
-	}
-
-	for i := range logs {
-		if err := processLog(ctx, client, store, chainID, &logs[i]); err != nil {
-			log.Printf("[chain %d] failed to process log in tx %s: %v", chainID, logs[i].TxHash.Hex(), err)
-			continue
+	for chunkStart <= int64(confirmedBlock) {
+		chunkEnd := chunkStart + maxBlockRange - 1
+		if chunkEnd > int64(confirmedBlock) {
+			chunkEnd = int64(confirmedBlock)
 		}
+
+		query := ethereum.FilterQuery{
+			FromBlock: big.NewInt(chunkStart),
+			ToBlock:   big.NewInt(chunkEnd),
+			Addresses: []common.Address{contractAddr},
+			Topics:    [][]common.Hash{{bridgeInitiatedTopic}},
+		}
+
+		logs, err := client.FilterLogs(ctx, query)
+		if err != nil {
+			return fmt.Errorf("filter logs: %w", err)
+		}
+
+		for i := range logs {
+			if err := processLog(ctx, client, store, chainID, &logs[i]); err != nil {
+				log.Printf("[chain %d] failed to process log in tx %s: %v", chainID, logs[i].TxHash.Hex(), err)
+				continue
+			}
+		}
+
+		totalEvents += len(logs)
+
+		// Update the last processed block after each chunk.
+		if err := store.SetLastBlock(chainID, chunkEnd); err != nil {
+			return fmt.Errorf("set last block: %w", err)
+		}
+
+		chunkStart = chunkEnd + 1
 	}
 
-	// Update the last processed block.
+	// Update fromBlock for next poll cycle.
 	*fromBlock = int64(confirmedBlock) + 1
-	if err := store.SetLastBlock(chainID, int64(confirmedBlock)); err != nil {
-		return fmt.Errorf("set last block: %w", err)
-	}
 
-	if len(logs) > 0 {
-		log.Printf("[chain %d] processed %d events up to block %d", chainID, len(logs), confirmedBlock)
+	if totalEvents > 0 {
+		log.Printf("[chain %d] processed %d events up to block %d", chainID, totalEvents, confirmedBlock)
 	}
 
 	return nil

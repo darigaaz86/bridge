@@ -27,7 +27,6 @@ interface UseBridgeTransactionResult {
   state: TransactionState;
   sourceTxHash: string | undefined;
   error: string | null;
-  approve: () => Promise<void>;
   bridge: () => Promise<void>;
   reset: () => void;
   /** Set after NEAR Intents bridge; use when adding history entry for status polling */
@@ -43,7 +42,6 @@ export function useBridgeTransaction(
   toToken: string,
   amount: bigint,
   recipient: string,
-  platformFeeBps?: number
 ): UseBridgeTransactionResult {
   const [state, setState] = useState<TransactionState>("idle");
   const [sourceTxHash, setSourceTxHash] = useState<string>();
@@ -57,80 +55,6 @@ export function useBridgeTransaction(
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient({ chainId: fromChain });
 
-  const approve = useCallback(async () => {
-    const sender = fromChain === TRON_CHAIN_ID ? tronAddress : address;
-    if (!quote || !sender) return;
-
-    try {
-      setState("approving");
-      setError(null);
-
-      // Tron NEAR Intents: no EVM approval needed (Tron uses TronWeb directly)
-      if (quote.provider === "near-intents" && fromChain === TRON_CHAIN_ID) {
-        setState("approved");
-        return;
-      }
-
-      // Switch to source chain if needed (EVM only)
-      await switchChainAsync({ chainId: fromChain });
-
-      const tokenAddress = getTokenAddressEVM(fromToken, fromChain);
-      // All EVM providers now approve to the aggregator contract
-      const spender = AGGREGATOR_CONTRACTS[fromChain];
-
-      if (!tokenAddress || !spender) {
-        throw new Error("Missing token or aggregator address");
-      }
-
-      // CCTP with forwarding: approve total to burn (outputAmount + bridge fee)
-      const approveAmount =
-        quote.provider === "cctp" ? quote.inputAmount : amount;
-
-      // Skip approve tx if allowance is already sufficient
-      if (publicClient) {
-        const currentAllowance = await publicClient.readContract({
-          address: tokenAddress,
-          abi: ERC20_ABI,
-          functionName: "allowance",
-          args: [sender as `0x${string}`, spender],
-        });
-        if (currentAllowance >= approveAmount) {
-          setState("approved");
-          return;
-        }
-      }
-
-      await writeContractAsync({
-        address: tokenAddress,
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [spender, approveAmount],
-        chainId: fromChain,
-      });
-
-      setState("approved");
-    } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Approval failed";
-      if (errorMessage.includes("rejected")) {
-        setState("idle");
-        setError("Transaction rejected by user");
-      } else {
-        setState("idle");
-        setError(errorMessage);
-      }
-    }
-  }, [
-    quote,
-    address,
-    fromChain,
-    fromToken,
-    amount,
-    switchChainAsync,
-    writeContractAsync,
-    publicClient,
-  ]);
-
   const bridge = useCallback(async () => {
     const sender = fromChain === TRON_CHAIN_ID ? tronAddress : address;
     if (!quote || !sender || !recipient) return;
@@ -138,6 +62,31 @@ export function useBridgeTransaction(
     try {
       setState("bridging");
       setError(null);
+
+      // Auto-approve if needed (EVM only, skip for Tron NEAR Intents)
+      if (!(quote.provider === "near-intents" && fromChain === TRON_CHAIN_ID)) {
+        await switchChainAsync({ chainId: fromChain });
+        const tokenAddr = getTokenAddressEVM(fromToken, fromChain);
+        const spender = AGGREGATOR_CONTRACTS[fromChain];
+        if (tokenAddr && spender && publicClient) {
+          const approveAmount = quote.provider === "cctp" ? quote.inputAmount : amount;
+          const currentAllowance = await publicClient.readContract({
+            address: tokenAddr,
+            abi: ERC20_ABI,
+            functionName: "allowance",
+            args: [sender as `0x${string}`, spender],
+          });
+          if (currentAllowance < approveAmount) {
+            await writeContractAsync({
+              address: tokenAddr,
+              abi: ERC20_ABI,
+              functionName: "approve",
+              args: [spender, approveAmount],
+              chainId: fromChain,
+            });
+          }
+        }
+      }
 
       let hash: string;
 
@@ -275,7 +224,6 @@ export function useBridgeTransaction(
               amount,
               recipient,
               refundTo: tronAddress ?? undefined,
-              platformFeeBps,
             });
             console.log("[NEAR Intents] Tron execQuote", {
               depositAddress: execQuote.depositAddress,
@@ -365,15 +313,33 @@ export function useBridgeTransaction(
               throw new Error("Aggregator not configured for this chain");
             }
 
+            // Read on-chain fee so we can request a 1Click quote for the post-fee amount.
+            // The aggregator deducts feeBps before forwarding to the provider, so the
+            // deposit address will receive (amount - fee). The 1Click quote must match.
+            let onChainFeeBps = 5; // fallback
+            if (publicClient) {
+              try {
+                const bps = await publicClient.readContract({
+                  address: aggregator,
+                  abi: AGGREGATOR_ABI,
+                  functionName: "feeBps",
+                });
+                onChainFeeBps = Number(bps);
+              } catch {
+                // use fallback
+              }
+            }
+            const platformFeeAmount = (amount * BigInt(onChainFeeBps)) / 10000n;
+            const netAmount = amount - platformFeeAmount;
+
             const execQuote = await nearIntentsAdapter.getExecutionQuote({
               fromChain,
               toChain,
               fromToken,
               toToken,
-              amount,
+              amount: netAmount,
               recipient,
               refundTo: address ?? undefined,
-              platformFeeBps,
             });
             console.log("[NEAR Intents] EVM execQuote", {
               depositAddress: execQuote.depositAddress,
@@ -401,7 +367,7 @@ export function useBridgeTransaction(
               args: [
                 PROVIDER_IDS["near-intents"],
                 tokenAddress,
-                execQuote.amountIn,
+                amount,
                 BigInt(toChain),
                 recipientBytes32,
                 providerData,
@@ -453,7 +419,6 @@ export function useBridgeTransaction(
     state,
     sourceTxHash,
     error,
-    approve,
     bridge,
     reset,
     nearIntentsDepositAddress,

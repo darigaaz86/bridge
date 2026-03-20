@@ -66,9 +66,14 @@ type lzDstTx struct {
 // --- NEAR 1Click API types ---
 
 type nearStatusResponse struct {
-	Status string `json:"status"`
-	TxHash string `json:"txHash"`
-	Reason string `json:"reason"`
+	Status      string          `json:"status"`
+	TxHash      string          `json:"txHash"`
+	Reason      string          `json:"reason"`
+	SwapDetails nearSwapDetails `json:"swapDetails"`
+}
+
+type nearSwapDetails struct {
+	AmountOut string `json:"amountOut"`
 }
 
 // StartPoller starts the status polling loop. It queries pending events from the
@@ -131,7 +136,7 @@ func pollPendingEvents(ctx context.Context, store *db.DB, client *http.Client) {
 		if eventAge > maxPendingAge {
 			log.Printf("[poller] tx %s (%s) exceeded max pending age (%s), marking as failed",
 				events[i].TxHash, events[i].Provider, maxPendingAge)
-			if err := store.UpdateEventStatus(events[i].TxHash, "failed", "", "Timed out: no status update within "+maxPendingAge.String()); err != nil {
+			if err := store.UpdateEventStatus(events[i].TxHash, "failed", "", "Timed out: no status update within "+maxPendingAge.String(), ""); err != nil {
 				log.Printf("[poller] failed to mark tx %s as timed out: %v", events[i].TxHash, err)
 			}
 			continue
@@ -193,7 +198,7 @@ func pollCCTP(ctx context.Context, store *db.DB, client *http.Client, event *typ
 		if destTx == "" {
 			destTx = msg.DestinationTx
 		}
-		return store.UpdateEventStatus(event.TxHash, "done", destTx, "")
+		return store.UpdateEventStatus(event.TxHash, "done", destTx, "", "")
 	default:
 		// Still in progress — update last polled time.
 		return store.UpdateLastPolledAt(event.TxHash, time.Now().Unix())
@@ -224,9 +229,9 @@ func pollLayerZero(ctx context.Context, store *db.DB, client *http.Client, event
 
 	switch status {
 	case "DELIVERED":
-		return store.UpdateEventStatus(event.TxHash, "done", msg.DstTx.TxHash, "")
+		return store.UpdateEventStatus(event.TxHash, "done", msg.DstTx.TxHash, "", "")
 	case "FAILED":
-		return store.UpdateEventStatus(event.TxHash, "failed", "", "LayerZero message delivery failed")
+		return store.UpdateEventStatus(event.TxHash, "failed", "", "LayerZero message delivery failed", "")
 	default:
 		return store.UpdateLastPolledAt(event.TxHash, time.Now().Unix())
 	}
@@ -264,19 +269,19 @@ func pollNEAR(ctx context.Context, store *db.DB, client *http.Client, event *typ
 
 	switch status {
 	case "COMPLETED", "SUCCESS":
-		return store.UpdateEventStatus(event.TxHash, "done", resp.TxHash, "")
+		return store.UpdateEventStatus(event.TxHash, "done", resp.TxHash, "", resp.SwapDetails.AmountOut)
 	case "FAILED":
 		reason := resp.Reason
 		if reason == "" {
 			reason = "NEAR Intents transaction failed"
 		}
-		return store.UpdateEventStatus(event.TxHash, "failed", "", reason)
+		return store.UpdateEventStatus(event.TxHash, "failed", "", reason, "")
 	case "REFUNDED":
 		reason := resp.Reason
 		if reason == "" {
 			reason = "NEAR Intents transaction refunded"
 		}
-		return store.UpdateEventStatus(event.TxHash, "failed", "", reason)
+		return store.UpdateEventStatus(event.TxHash, "failed", "", reason, "")
 	default:
 		return store.UpdateLastPolledAt(event.TxHash, time.Now().Unix())
 	}

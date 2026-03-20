@@ -15,6 +15,13 @@ export const AGGREGATOR_ABI = [
     outputs: [],
   },
   {
+    name: "feeBps",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint16" }],
+  },
+  {
     name: "BridgeInitiated",
     type: "event",
     inputs: [

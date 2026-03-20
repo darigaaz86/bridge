@@ -5,7 +5,7 @@ import {
   AGGREGATOR_CONTRACTS,
 } from "@/config/contracts";
 import { CHAIN_CONFIG, TRON_CHAIN_ID } from "@/config/chains";
-import { PLATFORM_FEE_BPS, PROVIDER_NAMES, DEFAULT_SLIPPAGE_BPS, APP_FEE_RECIPIENT } from "@/config/constants";
+import { PROVIDER_NAMES, DEFAULT_SLIPPAGE_BPS } from "@/config/constants";
 import type {
   IBridgeAdapter,
   BridgeParams,
@@ -54,7 +54,6 @@ interface NearIntentsQuoteRequest {
   recipientType: "DESTINATION_CHAIN" | "INTENTS";
   deadline: string; // ISO 8601
   amount: string;
-  appFees?: Array<{ recipient: string; fee: number }>;
 }
 
 const TAG = "[NEAR Intents]";
@@ -62,13 +61,6 @@ const TAG = "[NEAR Intents]";
 class NearIntentsAdapter implements IBridgeAdapter {
   name = "near-intents" as const;
   displayName = PROVIDER_NAMES["near-intents"];
-
-  /** Build appFees array if a recipient is configured */
-  private buildAppFees(feeBps?: number): Array<{ recipient: string; fee: number }> | undefined {
-    const bps = feeBps ?? PLATFORM_FEE_BPS;
-    if (!APP_FEE_RECIPIENT || bps <= 0) return undefined;
-    return [{ recipient: APP_FEE_RECIPIENT, fee: bps }];
-  }
 
   supportsRoute(
     fromChain: number,
@@ -116,6 +108,15 @@ class NearIntentsAdapter implements IBridgeAdapter {
           : "0x0000000000000000000000000000000000000001");
       const deadline = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 min from now
 
+      // On EVM chains, the aggregator deducts feeBps before forwarding to 1Click.
+      // Quote with the post-fee amount so the displayed output matches reality.
+      const AGGREGATOR_FEE_BPS = 5;
+      const hasAggregator = params.fromChain !== TRON_CHAIN_ID && !!AGGREGATOR_CONTRACTS[params.fromChain];
+      const platformFeeAmount = hasAggregator
+        ? (params.amount * BigInt(AGGREGATOR_FEE_BPS)) / 10000n
+        : 0n;
+      const quoteAmount = params.amount - platformFeeAmount;
+
       const body: NearIntentsQuoteRequest = {
         dry: true,
         swapType: "EXACT_INPUT",
@@ -128,8 +129,7 @@ class NearIntentsAdapter implements IBridgeAdapter {
         recipient,
         recipientType: "DESTINATION_CHAIN",
         deadline,
-        amount: params.amount.toString(),
-        appFees: this.buildAppFees(params.platformFeeBps),
+        amount: quoteAmount.toString(),
       };
 
       console.log(TAG, "getQuote request", JSON.stringify(body));
@@ -153,21 +153,13 @@ class NearIntentsAdapter implements IBridgeAdapter {
       const rawOut = data.quote?.amountOut ?? data.output_amount ?? data.amountOut;
       if (rawOut == null || rawOut === "") return null;
       const outputAmount = BigInt(rawOut);
-      const platformFeeBps = params.platformFeeBps ?? PLATFORM_FEE_BPS;
-      // When appFees is sent, the API deducts the fee from input before swapping.
-      // Calculate what was taken so we can display it, but don't subtract again from output.
-      const platformFee = APP_FEE_RECIPIENT && platformFeeBps > 0
-        ? (params.amount * BigInt(platformFeeBps)) / 10000n
-        : 0n;
-      const bridgeFee = params.amount - outputAmount - platformFee;
+      // bridgeFee = what 1Click consumed as solver spread (quoteAmount in - output)
+      const bridgeFee = quoteAmount - outputAmount;
 
       console.log(TAG, "getQuote fees", {
         inputAmount: params.amount.toString(),
         outputAmount: outputAmount.toString(),
-        platformFeeBps,
-        platformFee: platformFee.toString(),
         bridgeFee: (bridgeFee > 0n ? bridgeFee : 0n).toString(),
-        appFeeRecipient: APP_FEE_RECIPIENT || "(none)",
       });
 
       const fromChainName = CHAIN_CONFIG[params.fromChain]?.name || "";
@@ -181,7 +173,7 @@ class NearIntentsAdapter implements IBridgeAdapter {
         estimatedTime: 30,
         gasFee: 0n,
         bridgeFee: bridgeFee > 0n ? bridgeFee : 0n,
-        platformFee,
+        platformFee: 0n,
         route: `${params.fromToken} on ${fromChainName} → ${params.toToken} on ${toChainName} via NEAR Intents`,
       };
     } catch {
@@ -246,7 +238,6 @@ class NearIntentsAdapter implements IBridgeAdapter {
       recipientType: "DESTINATION_CHAIN" as const,
       deadline,
       amount: params.amount.toString(),
-      appFees: this.buildAppFees(params.platformFeeBps),
       // Optional: help the relay associate the quote with the connected wallet
       ...(params.recipient && { connectedWallets: [params.recipient] }),
     };

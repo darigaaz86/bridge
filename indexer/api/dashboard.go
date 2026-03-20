@@ -66,7 +66,7 @@ a:hover{text-decoration:underline}
 <table>
 <thead><tr>
   <th>#</th><th>Status</th><th>Provider</th><th>Tx Hash</th>
-  <th>Sender</th><th>Amount</th><th>Fee</th>
+  <th>Sender</th><th>Amount</th><th>Platform Fee</th><th>Bridge Fee</th><th>Received</th>
   <th>Source</th><th>Dest</th><th>Time</th>
 </tr></thead>
 <tbody id="tbody"></tbody>
@@ -94,7 +94,7 @@ function addrLink(addr,chainId){
   if(!d) return '<span class="mono truncate" title="'+addr+'">'+addr.slice(0,8)+'…</span>';
   return '<a href="https://'+d+'/address/'+addr+'" target="_blank" class="mono truncate" title="'+addr+'">'+addr.slice(0,8)+'…</a>';
 }
-function fmtAmount(raw){return (Number(raw)/1e6).toFixed(2)}
+function fmtAmount(raw){return (Number(raw)/1e6).toFixed(4)}
 function fmtTime(ts){return new Date(ts*1000).toLocaleString()}
 
 function render(events){
@@ -112,6 +112,8 @@ function render(events){
     '<td>'+addrLink(e.sender,e.chainId)+'</td>'+
     '<td>'+fmtAmount(e.amount)+'</td>'+
     '<td>'+fmtAmount(e.platformFee)+'</td>'+
+    '<td>'+(e.receivedAmount ? fmtAmount(String(Number(e.amount)-Number(e.platformFee)-Number(e.receivedAmount))) : '-')+'</td>'+
+    '<td>'+(e.receivedAmount ? fmtAmount(e.receivedAmount) : fmtAmount(String(Number(e.amount)-Number(e.platformFee))))+'</td>'+
     '<td>'+chainName(e.sourceChainId)+'</td>'+
     '<td>'+chainName(e.destinationChainId)+'</td>'+
     '<td style="white-space:nowrap">'+fmtTime(e.timestamp)+'</td>'+

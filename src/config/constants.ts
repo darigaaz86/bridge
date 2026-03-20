@@ -1,11 +1,3 @@
-// Platform fee in basis points (1 bps = 0.01%)
-export const PLATFORM_FEE_BPS = 100; // 1% default for NEAR Intents
-
-// Valid promo codes that waive the platform fee
-export const VALID_PROMO_CODES: string[] = [
-  "QORE0FEE",
-];
-
 // Quote refresh interval in milliseconds
 export const QUOTE_REFRESH_INTERVAL = 15_000; // 15 seconds
 
@@ -28,9 +20,6 @@ export const PROVIDER_NAMES = {
   usdt0: "USDT0 (LayerZero)",
   "near-intents": "NEAR Intents",
 } as const;
-
-// NEAR Intents appFees recipient (NEAR account, implicit account, or EVM address)
-export const APP_FEE_RECIPIENT = "de3bridge.near";
 
 // WalletConnect Project ID (get yours at https://cloud.walletconnect.com)
 export const WALLETCONNECT_PROJECT_ID =

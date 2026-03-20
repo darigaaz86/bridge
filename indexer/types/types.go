@@ -22,6 +22,7 @@ type IndexedBridgeEvent struct {
 	Status             string `json:"status" db:"status"`
 	DestinationTxHash  string `json:"destinationTxHash,omitempty" db:"destination_tx_hash"`
 	FailureMessage     string `json:"failureMessage,omitempty" db:"failure_message"`
+	ReceivedAmount     string `json:"receivedAmount,omitempty" db:"received_amount"`
 	LastPolledAt       *int64 `json:"lastPolledAt,omitempty" db:"last_polled_at"`
 }
 

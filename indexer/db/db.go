@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS bridge_events (
   status TEXT NOT NULL DEFAULT 'pending',
   destination_tx_hash TEXT,
   failure_message TEXT,
+  received_amount TEXT,
   last_polled_at BIGINT
 );
 
@@ -63,6 +64,9 @@ func New(connStr string) (*DB, error) {
 		return nil, fmt.Errorf("initialize schema: %w", err)
 	}
 
+	// Migration: add received_amount column if missing (for existing databases)
+	conn.Exec(`ALTER TABLE bridge_events ADD COLUMN IF NOT EXISTS received_amount TEXT`)
+
 	return &DB{conn: conn}, nil
 }
 
@@ -83,12 +87,12 @@ func (d *DB) InsertBridgeEvent(e *types.IndexedBridgeEvent) error {
 			nonce, tx_hash, block_number, timestamp, chain_id,
 			sender, recipient, source_chain_id, destination_chain_id,
 			token, amount, platform_fee, provider, provider_data,
-			status, destination_tx_hash, failure_message, last_polled_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+			status, destination_tx_hash, failure_message, received_amount, last_polled_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
 		e.Nonce, e.TxHash, e.BlockNumber, e.Timestamp, e.ChainID,
 		e.Sender, e.Recipient, e.SourceChainID, e.DestinationChainID,
 		e.Token, e.Amount, e.PlatformFee, e.Provider, e.ProviderData,
-		e.Status, nilIfEmpty(e.DestinationTxHash), nilIfEmpty(e.FailureMessage), e.LastPolledAt,
+		e.Status, nilIfEmpty(e.DestinationTxHash), nilIfEmpty(e.FailureMessage), nilIfEmpty(e.ReceivedAmount), e.LastPolledAt,
 	)
 	if err != nil {
 		return fmt.Errorf("insert bridge event: %w", err)
@@ -105,7 +109,7 @@ func (d *DB) GetAllEvents(limit, offset int) ([]types.IndexedBridgeEvent, error)
 		SELECT id, nonce, tx_hash, block_number, timestamp, chain_id,
 			sender, recipient, source_chain_id, destination_chain_id,
 			token, amount, platform_fee, provider, provider_data,
-			status, destination_tx_hash, failure_message, last_polled_at
+			status, destination_tx_hash, failure_message, received_amount, last_polled_at
 		FROM bridge_events
 		ORDER BY timestamp DESC
 		LIMIT $1 OFFSET $2`,
@@ -128,7 +132,7 @@ func (d *DB) GetEventsByAddress(address string, limit, offset int) ([]types.Inde
 		SELECT id, nonce, tx_hash, block_number, timestamp, chain_id,
 			sender, recipient, source_chain_id, destination_chain_id,
 			token, amount, platform_fee, provider, provider_data,
-			status, destination_tx_hash, failure_message, last_polled_at
+			status, destination_tx_hash, failure_message, received_amount, last_polled_at
 		FROM bridge_events
 		WHERE LOWER(sender) = LOWER($1)
 		ORDER BY timestamp DESC
@@ -148,7 +152,7 @@ func (d *DB) GetEventByTxHash(txHash string) (*types.IndexedBridgeEvent, error) 
 		SELECT id, nonce, tx_hash, block_number, timestamp, chain_id,
 			sender, recipient, source_chain_id, destination_chain_id,
 			token, amount, platform_fee, provider, provider_data,
-			status, destination_tx_hash, failure_message, last_polled_at
+			status, destination_tx_hash, failure_message, received_amount, last_polled_at
 		FROM bridge_events
 		WHERE LOWER(tx_hash) = LOWER($1)`,
 		txHash,
@@ -162,7 +166,7 @@ func (d *DB) GetPendingEvents() ([]types.IndexedBridgeEvent, error) {
 		SELECT id, nonce, tx_hash, block_number, timestamp, chain_id,
 			sender, recipient, source_chain_id, destination_chain_id,
 			token, amount, platform_fee, provider, provider_data,
-			status, destination_tx_hash, failure_message, last_polled_at
+			status, destination_tx_hash, failure_message, received_amount, last_polled_at
 		FROM bridge_events
 		WHERE status = 'pending'
 		ORDER BY timestamp ASC`,
@@ -176,14 +180,15 @@ func (d *DB) GetPendingEvents() ([]types.IndexedBridgeEvent, error) {
 
 // UpdateEventStatus updates the status of a bridge event and optionally sets
 // the destination tx hash and failure message.
-func (d *DB) UpdateEventStatus(txHash, status, destinationTxHash, failureMessage string) error {
+func (d *DB) UpdateEventStatus(txHash, status, destinationTxHash, failureMessage, receivedAmount string) error {
 	_, err := d.conn.Exec(`
 		UPDATE bridge_events
 		SET status = $1,
 			destination_tx_hash = $2,
-			failure_message = $3
-		WHERE LOWER(tx_hash) = LOWER($4)`,
-		status, nilIfEmpty(destinationTxHash), nilIfEmpty(failureMessage), txHash,
+			failure_message = $3,
+			received_amount = $4
+		WHERE LOWER(tx_hash) = LOWER($5)`,
+		status, nilIfEmpty(destinationTxHash), nilIfEmpty(failureMessage), nilIfEmpty(receivedAmount), txHash,
 	)
 	if err != nil {
 		return fmt.Errorf("update event status: %w", err)
@@ -252,14 +257,14 @@ func scanEvents(rows *sql.Rows) ([]types.IndexedBridgeEvent, error) {
 // scanEvent scans a single row into an IndexedBridgeEvent.
 func scanEvent(row *sql.Row) (*types.IndexedBridgeEvent, error) {
 	var e types.IndexedBridgeEvent
-	var destTxHash, failureMsg sql.NullString
+	var destTxHash, failureMsg, receivedAmt sql.NullString
 	var lastPolled sql.NullInt64
 
 	err := row.Scan(
 		&e.ID, &e.Nonce, &e.TxHash, &e.BlockNumber, &e.Timestamp, &e.ChainID,
 		&e.Sender, &e.Recipient, &e.SourceChainID, &e.DestinationChainID,
 		&e.Token, &e.Amount, &e.PlatformFee, &e.Provider, &e.ProviderData,
-		&e.Status, &destTxHash, &failureMsg, &lastPolled,
+		&e.Status, &destTxHash, &failureMsg, &receivedAmt, &lastPolled,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -274,6 +279,9 @@ func scanEvent(row *sql.Row) (*types.IndexedBridgeEvent, error) {
 	if failureMsg.Valid {
 		e.FailureMessage = failureMsg.String
 	}
+	if receivedAmt.Valid {
+		e.ReceivedAmount = receivedAmt.String
+	}
 	if lastPolled.Valid {
 		e.LastPolledAt = &lastPolled.Int64
 	}
@@ -283,14 +291,14 @@ func scanEvent(row *sql.Row) (*types.IndexedBridgeEvent, error) {
 // scanRow scans a single row from *sql.Rows into an IndexedBridgeEvent.
 func scanRow(rows *sql.Rows) (*types.IndexedBridgeEvent, error) {
 	var e types.IndexedBridgeEvent
-	var destTxHash, failureMsg sql.NullString
+	var destTxHash, failureMsg, receivedAmt sql.NullString
 	var lastPolled sql.NullInt64
 
 	err := rows.Scan(
 		&e.ID, &e.Nonce, &e.TxHash, &e.BlockNumber, &e.Timestamp, &e.ChainID,
 		&e.Sender, &e.Recipient, &e.SourceChainID, &e.DestinationChainID,
 		&e.Token, &e.Amount, &e.PlatformFee, &e.Provider, &e.ProviderData,
-		&e.Status, &destTxHash, &failureMsg, &lastPolled,
+		&e.Status, &destTxHash, &failureMsg, &receivedAmt, &lastPolled,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scan row: %w", err)
@@ -301,6 +309,9 @@ func scanRow(rows *sql.Rows) (*types.IndexedBridgeEvent, error) {
 	}
 	if failureMsg.Valid {
 		e.FailureMessage = failureMsg.String
+	}
+	if receivedAmt.Valid {
+		e.ReceivedAmount = receivedAmt.String
 	}
 	if lastPolled.Valid {
 		e.LastPolledAt = &lastPolled.Int64
