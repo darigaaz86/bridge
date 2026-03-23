@@ -7,6 +7,7 @@ import { cn, shortenAddress } from "@/lib/utils";
 import { useTronLink } from "@/contexts/TronLinkContext";
 import { CHAIN_CONFIG } from "@/config/chains";
 import { TRON_CHAIN_ID } from "@/config/chains";
+import { INDEXER_UI_URL } from "@/config/constants";
 
 const walletButtonClass =
   "flex items-center gap-2 h-10 min-w-[140px] rounded-full border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-medium text-white transition-colors hover:border-[var(--border-hover)] hover:bg-[var(--card-hover)]";
@@ -42,15 +43,14 @@ export function Header() {
           >
             Bridge
           </Link>
-          <Link
-            href="/history"
-            className={cn(
-              "transition-colors",
-              pathname === "/history" ? "text-white font-medium" : "hover:text-white"
-            )}
+          <a
+            href={INDEXER_UI_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-white transition-colors"
           >
             History
-          </Link>
+          </a>
           <a href="#" className="hover:text-white transition-colors">
             Docs
           </a>

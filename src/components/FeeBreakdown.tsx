@@ -3,22 +3,21 @@
 import { formatAmount, formatTime } from "@/lib/utils";
 import type { BridgeQuote } from "@/services/types";
 
-// On-chain aggregator fee — must match the deployed contract's feeBps
-const AGGREGATOR_FEE_BPS = 5;
-
 interface FeeBreakdownProps {
   quote: BridgeQuote;
   fromToken: string;
   toToken: string;
+  feeBps: number;
 }
 
-export function FeeBreakdown({ quote, fromToken, toToken }: FeeBreakdownProps) {
-  const platformFee = (quote.inputAmount * BigInt(AGGREGATOR_FEE_BPS)) / 10000n;
+export function FeeBreakdown({ quote, fromToken, toToken, feeBps }: FeeBreakdownProps) {
+  const platformFee = (quote.inputAmount * BigInt(feeBps)) / 10000n;
+  const feePercent = (feeBps / 100).toFixed(2);
 
   return (
     <div className="rounded-xl bg-[var(--card-hover)]/60 border border-[var(--border)] p-4 space-y-2.5 text-xs">
       <div className="flex justify-between text-[var(--muted)]">
-        <span>Platform fee (0.05%)</span>
+        <span>Platform fee ({feePercent}%)</span>
         <span className="text-white">
           {formatAmount(platformFee, 6, 4)} {fromToken}
         </span>

@@ -12,6 +12,7 @@ import { FeeBreakdown } from "./FeeBreakdown";
 import { TransactionStatusDisplay } from "./TransactionStatus";
 import { useBridgeQuote } from "@/hooks/useBridgeQuote";
 import { useBridgeTransaction } from "@/hooks/useBridgeTransaction";
+import { useAggregatorFeeBps } from "@/hooks/useAggregatorFeeBps";
 
 import { useTronLink } from "@/contexts/TronLinkContext";
 import { DEFAULT_SLIPPAGE_BPS } from "@/config/constants";
@@ -33,6 +34,7 @@ export function BridgeCard() {
   const [preferFastTransfer, setPreferFastTransfer] = useState(false);
 
   const { tronAddress, isTronConnected, isTronAvailable, connectTron, disconnectTron } = useTronLink();
+  const aggregatorFeeBps = useAggregatorFeeBps(fromChain);
   const [customRecipient, setCustomRecipient] = useState("");
   const [useCustomRecipient, setUseCustomRecipient] = useState(false);
   const selfRecipient = toChain === TRON_CHAIN_ID ? (tronAddress ?? "") : (address ?? "");
@@ -72,9 +74,10 @@ export function BridgeCard() {
       toToken,
       amount: parsedAmount,
       slippageBps: DEFAULT_SLIPPAGE_BPS,
+      platformFeeBps: aggregatorFeeBps,
       preferFastTransfer,
     };
-  }, [fromChain, toChain, fromToken, toToken, parsedAmount, preferFastTransfer]);
+  }, [fromChain, toChain, fromToken, toToken, parsedAmount, preferFastTransfer, aggregatorFeeBps]);
 
   // Fetch quotes
   const { quotes, bestQuote, isLoading: quotesLoading, error: quoteError } =
@@ -307,7 +310,7 @@ export function BridgeCard() {
 
         {/* Fee Breakdown */}
         {selectedQuote && !quotesLoading && (
-          <FeeBreakdown quote={selectedQuote} fromToken={fromToken} toToken={toToken} />
+          <FeeBreakdown quote={selectedQuote} fromToken={fromToken} toToken={toToken} feeBps={aggregatorFeeBps} />
         )}
 
         {/* Error Display */}

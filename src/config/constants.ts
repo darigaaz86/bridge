@@ -11,8 +11,9 @@ export const MAX_SLIPPAGE_BPS = 500; // 5%
 // Transaction status polling interval (ms)
 export const STATUS_POLL_INTERVAL = 5_000; // 5 seconds
 
-// Bridge history: poll pending entries every 10s to detect completion
-export const HISTORY_STATUS_POLL_INTERVAL_MS = 10_000;
+// Indexer UI URL — where the "History" link points to
+export const INDEXER_UI_URL =
+  process.env.NEXT_PUBLIC_INDEXER_UI_URL || "https://indexer.qorebridge.com";
 
 // Bridge provider names
 export const PROVIDER_NAMES = {

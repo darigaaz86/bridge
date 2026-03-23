@@ -110,10 +110,10 @@ class NearIntentsAdapter implements IBridgeAdapter {
 
       // On EVM chains, the aggregator deducts feeBps before forwarding to 1Click.
       // Quote with the post-fee amount so the displayed output matches reality.
-      const AGGREGATOR_FEE_BPS = 5;
       const hasAggregator = params.fromChain !== TRON_CHAIN_ID && !!AGGREGATOR_CONTRACTS[params.fromChain];
+      const feeBps = params.platformFeeBps ?? 5;
       const platformFeeAmount = hasAggregator
-        ? (params.amount * BigInt(AGGREGATOR_FEE_BPS)) / 10000n
+        ? (params.amount * BigInt(feeBps)) / 10000n
         : 0n;
       const quoteAmount = params.amount - platformFeeAmount;
 
