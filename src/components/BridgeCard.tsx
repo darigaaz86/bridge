@@ -209,7 +209,6 @@ export function BridgeCard() {
             <ChainSelector
               selectedChainId={toChain}
               onSelect={setToChain}
-              excludeChainId={fromChain}
               label="To"
             />
             <TokenSelector

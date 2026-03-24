@@ -68,7 +68,7 @@ class NearIntentsAdapter implements IBridgeAdapter {
     fromToken: string,
     toToken: string
   ): boolean {
-    if (fromChain === toChain) return false;
+    if (fromChain === toChain && fromToken === toToken) return false;
     const originAsset = get1ClickAssetId(fromChain, fromToken);
     const destinationAsset = get1ClickAssetId(toChain, toToken);
     return originAsset != null && destinationAsset != null;
