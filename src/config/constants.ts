@@ -13,7 +13,7 @@ export const STATUS_POLL_INTERVAL = 5_000; // 5 seconds
 
 // Indexer UI URL — where the "History" link points to
 export const INDEXER_UI_URL =
-  process.env.NEXT_PUBLIC_INDEXER_UI_URL || "https://indexer.qorebridge.com";
+  process.env.NEXT_PUBLIC_INDEXER_UI_URL || "https://qore-bridge.qore3.com/indexer";
 
 // Bridge provider names
 export const PROVIDER_NAMES = {
