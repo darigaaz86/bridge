@@ -3,14 +3,20 @@ import {
   NEAR_INTENTS_STATUS_URL,
   NEAR_INTENTS_DEPOSIT_SUBMIT_URL,
   AGGREGATOR_CONTRACTS,
+  PROVIDER_IDS,
 } from "@/config/contracts";
 import { CHAIN_CONFIG, TRON_CHAIN_ID } from "@/config/chains";
 import { PROVIDER_NAMES, DEFAULT_SLIPPAGE_BPS } from "@/config/constants";
+import { getTokenAddress, getTokenAddressEVM } from "@/config/tokens";
+import { pad, encodeAbiParameters } from "viem";
+import { AGGREGATOR_ABI } from "@/abi/aggregator";
 import type {
   IBridgeAdapter,
   BridgeParams,
   BridgeQuote,
   TransactionStatus,
+  ExecuteContext,
+  ExecuteResult,
 } from "./types";
 
 /**
@@ -183,6 +189,202 @@ class NearIntentsAdapter implements IBridgeAdapter {
 
   getApprovalAddress(fromChain: number): `0x${string}` | undefined {
     return AGGREGATOR_CONTRACTS[fromChain];
+  }
+
+  needsApproval(fromChain: number): boolean {
+    // Tron uses direct TRC20 transfer, no EVM approval needed
+    return fromChain !== TRON_CHAIN_ID;
+  }
+
+  async execute(
+    params: BridgeParams,
+    _quote: BridgeQuote,
+    ctx: ExecuteContext,
+  ): Promise<ExecuteResult> {
+    if (params.fromChain === TRON_CHAIN_ID) {
+      return this.executeTron(params, ctx);
+    }
+    return this.executeEvm(params, ctx);
+  }
+
+  private async executeTron(
+    params: BridgeParams,
+    ctx: ExecuteContext,
+  ): Promise<ExecuteResult> {
+    if (!window.tronWeb?.contract) {
+      throw new Error("TronLink not ready. Please refresh and connect TronLink.");
+    }
+
+    const execQuote = await this.getExecutionQuote({
+      ...params,
+      refundTo: ctx.tronAddress ?? undefined,
+    });
+
+    console.log(TAG, "Tron execQuote", {
+      depositAddress: execQuote.depositAddress,
+      depositMemo: execQuote.depositMemo,
+      amountIn: execQuote.amountIn.toString(),
+    });
+
+    const trc20Address = getTokenAddress(params.fromToken, params.fromChain);
+    if (!trc20Address) throw new Error("Unsupported token for Tron");
+
+    const tw = window.tronWeb!;
+    const amountStr = execQuote.amountIn.toString();
+    const toAddr = execQuote.depositAddress;
+
+    let txResult: { transaction?: string; txid?: string } | string | null = null;
+    try {
+      const factory = await Promise.resolve(tw.contract(
+        [
+          {
+            name: "transfer",
+            type: "function",
+            inputs: [
+              { name: "to", type: "address" },
+              { name: "value", type: "uint256" },
+            ],
+            outputs: [{ name: "", type: "bool" }],
+            stateMutability: "nonpayable",
+          },
+        ],
+        trc20Address
+      ));
+      const instance = typeof (factory as { at?: (a: string) => unknown }).at === "function"
+        ? (factory as { at: (a: string) => unknown }).at(trc20Address)
+        : factory;
+      const inst = instance as {
+        transfer?: (to: string, amount: string) => { send: (o?: { from: string }) => Promise<unknown> };
+        methods?: { transfer?: (to: string, amount: string) => { send: (o?: { from: string }) => Promise<unknown> } };
+      };
+      let sendable: { send?: (o?: { from: string }) => Promise<unknown> } | null = null;
+      if (inst.transfer) {
+        sendable = inst.transfer(toAddr, amountStr) as { send?: (o?: { from: string }) => Promise<unknown> };
+      } else if (inst.methods?.transfer) {
+        sendable = inst.methods.transfer(toAddr, amountStr) as { send?: (o?: { from: string }) => Promise<unknown> };
+      }
+      if (sendable && typeof sendable.send === "function") {
+        const tx = await sendable.send({ from: ctx.tronAddress! });
+        txResult = tx as { transaction?: string; txid?: string };
+      }
+    } catch {
+      // Fallback: triggerSmartContract + sign + sendRawTransaction
+    }
+
+    if (!txResult && tw.transactionBuilder?.triggerSmartContract && tw.trx?.sign && tw.trx?.sendRawTransaction) {
+      const functionSelector = "transfer(address,uint256)";
+      const parameter = [
+        { type: "address", value: toAddr },
+        { type: "uint256", value: amountStr },
+      ];
+      const built = await tw.transactionBuilder.triggerSmartContract(
+        trc20Address,
+        functionSelector,
+        {},
+        parameter
+      );
+      if (built?.transaction) {
+        const signed = await tw.trx.sign(built.transaction);
+        const result = (await tw.trx.sendRawTransaction(signed)) as { txid?: string; transaction?: string | { txID?: string } };
+        const txId = result?.txid ?? (typeof result?.transaction === "string" ? result.transaction : result?.transaction?.txID);
+        if (txId) txResult = { txid: txId };
+      }
+    }
+
+    const hash = typeof txResult === "string" ? txResult : (txResult?.txid ?? (txResult as { transaction?: string })?.transaction ?? "");
+    if (!hash) throw new Error("Tron transaction failed");
+
+    try {
+      await this.submitDepositTx(hash, execQuote.depositAddress, execQuote.depositMemo);
+    } catch {
+      // Non-fatal
+    }
+
+    return {
+      hash,
+      meta: {
+        depositAddress: execQuote.depositAddress,
+        ...(execQuote.depositMemo && { depositMemo: execQuote.depositMemo }),
+      },
+    };
+  }
+
+  private async executeEvm(
+    params: BridgeParams,
+    ctx: ExecuteContext,
+  ): Promise<ExecuteResult> {
+    const aggregator = AGGREGATOR_CONTRACTS[params.fromChain];
+    if (!aggregator) {
+      throw new Error("Aggregator not configured for this chain");
+    }
+
+    // Read on-chain fee so we can request a 1Click quote for the post-fee amount
+    let onChainFeeBps = params.platformFeeBps ?? 5;
+    if (ctx.publicClient) {
+      try {
+        const bps = await ctx.publicClient.readContract({
+          address: aggregator,
+          abi: AGGREGATOR_ABI,
+          functionName: "feeBps",
+        });
+        onChainFeeBps = Number(bps);
+      } catch {
+        // use fallback
+      }
+    }
+    const platformFeeAmount = (params.amount * BigInt(onChainFeeBps)) / 10000n;
+    const netAmount = params.amount - platformFeeAmount;
+
+    const execQuote = await this.getExecutionQuote({
+      ...params,
+      amount: netAmount,
+      refundTo: ctx.evmAddress ?? undefined,
+    });
+
+    console.log(TAG, "EVM execQuote", {
+      depositAddress: execQuote.depositAddress,
+      depositMemo: execQuote.depositMemo,
+      amountIn: execQuote.amountIn.toString(),
+    });
+
+    const tokenAddress = getTokenAddressEVM(params.fromToken, params.fromChain);
+    if (!tokenAddress) throw new Error("Unsupported token for this chain");
+
+    const recipientBytes32 = pad(params.recipient as `0x${string}`, { size: 32 });
+
+    const providerData = encodeAbiParameters(
+      [{ type: "address" }],
+      [execQuote.depositAddress as `0x${string}`]
+    );
+
+    const hash = await ctx.writeContractAsync({
+      address: aggregator,
+      abi: AGGREGATOR_ABI,
+      functionName: "bridge",
+      args: [
+        PROVIDER_IDS["near-intents"],
+        tokenAddress,
+        params.amount,
+        BigInt(params.toChain),
+        recipientBytes32,
+        providerData,
+      ],
+      chainId: params.fromChain,
+    });
+
+    try {
+      await this.submitDepositTx(hash, execQuote.depositAddress, execQuote.depositMemo);
+    } catch {
+      // Non-fatal
+    }
+
+    return {
+      hash,
+      meta: {
+        depositAddress: execQuote.depositAddress,
+        ...(execQuote.depositMemo && { depositMemo: execQuote.depositMemo }),
+      },
+    };
   }
 
   /**

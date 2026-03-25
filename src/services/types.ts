@@ -1,4 +1,4 @@
-export type BridgeProvider = "cctp" | "usdt0" | "near-intents";
+export type BridgeProvider = "cctp" | "usdt0" | "near-intents" | (string & {});
 
 export type TransactionState =
   | "idle"
@@ -13,7 +13,7 @@ export type TransactionState =
   | "failed";
 
 export interface BridgeQuote {
-  provider: BridgeProvider;
+  provider: string;
   providerName: string;
   inputAmount: bigint;
   outputAmount: bigint;
@@ -50,8 +50,30 @@ export interface TransactionStatus {
   message?: string;
 }
 
+/** Context passed to adapter.execute() — provides wallet interaction capabilities */
+export interface ExecuteContext {
+  /** wagmi writeContractAsync for sending EVM transactions */
+  writeContractAsync: (args: Record<string, unknown>) => Promise<string>;
+  /** viem PublicClient for reading on-chain state */
+  publicClient: {
+    readContract: (args: Record<string, unknown>) => Promise<unknown>;
+  } | null;
+  /** Connected EVM address */
+  evmAddress?: string;
+  /** Connected Tron address */
+  tronAddress?: string;
+}
+
+/** Result returned by adapter.execute() */
+export interface ExecuteResult {
+  /** Transaction hash */
+  hash: string;
+  /** Provider-specific metadata (e.g. depositAddress, depositMemo for NEAR Intents) */
+  meta?: Record<string, string>;
+}
+
 export interface IBridgeAdapter {
-  name: BridgeProvider;
+  name: string;
   displayName: string;
 
   /** Check if this adapter can handle the given route */
@@ -67,6 +89,19 @@ export interface IBridgeAdapter {
 
   /** Get the spender address that needs token approval */
   getApprovalAddress(fromChain: number): `0x${string}` | undefined;
+
+  /** Amount to approve (defaults to params.amount if not implemented) */
+  getApproveAmount?(params: BridgeParams, quote: BridgeQuote): bigint;
+
+  /** Whether this adapter needs EVM approval (return false for e.g. Tron direct transfers) */
+  needsApproval?(fromChain: number): boolean;
+
+  /** Execute the bridge transaction. Each adapter owns its own tx-building logic. */
+  execute(
+    params: BridgeParams,
+    quote: BridgeQuote,
+    ctx: ExecuteContext,
+  ): Promise<ExecuteResult>;
 
   /** Get current transaction status (options used by NEAR Intents: depositAddress, depositMemo) */
   getStatus(

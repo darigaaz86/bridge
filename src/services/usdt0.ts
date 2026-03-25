@@ -3,14 +3,20 @@ import {
   LZ_ENDPOINT_IDS,
   LZ_SCAN_API,
   AGGREGATOR_CONTRACTS,
+  PROVIDER_IDS,
 } from "@/config/contracts";
 import { CHAIN_CONFIG } from "@/config/chains";
 import { PROVIDER_NAMES } from "@/config/constants";
+import { pad, encodeAbiParameters } from "viem";
+import { AGGREGATOR_ABI } from "@/abi/aggregator";
+import { OFT_ABI } from "@/abi/oft";
 import type {
   IBridgeAdapter,
   BridgeParams,
   BridgeQuote,
   TransactionStatus,
+  ExecuteContext,
+  ExecuteResult,
 } from "./types";
 
 // Legacy Mesh chains that charge 3 bps
@@ -86,6 +92,86 @@ class USDT0Adapter implements IBridgeAdapter {
 
   getApprovalAddress(fromChain: number): `0x${string}` | undefined {
     return AGGREGATOR_CONTRACTS[fromChain];
+  }
+
+  async execute(
+    params: BridgeParams,
+    quote: BridgeQuote,
+    ctx: ExecuteContext,
+  ): Promise<ExecuteResult> {
+    const oftContract = USDT0_OFT_CONTRACTS[params.fromChain];
+    const aggregator = AGGREGATOR_CONTRACTS[params.fromChain];
+    const dstEid = LZ_ENDPOINT_IDS[params.toChain];
+
+    if (!oftContract || !aggregator || !dstEid) {
+      throw new Error("USDT0 OFT not supported for this route");
+    }
+
+    const recipientBytes32 = pad(params.recipient as `0x${string}`, { size: 32 });
+    const minAmountLD = (params.amount * 995n) / 1000n; // 0.5% slippage
+    const extraOptions = "0x" as `0x${string}`;
+    const composeMsg = "0x" as `0x${string}`;
+    const oftCmd = "0x" as `0x${string}`;
+
+    // Quote the LayerZero fee from the OFT contract (needed for msg.value)
+    const sendParam = {
+      dstEid,
+      to: recipientBytes32,
+      amountLD: params.amount,
+      minAmountLD,
+      extraOptions,
+      composeMsg,
+      oftCmd,
+    };
+
+    let nativeFee: bigint;
+    if (ctx.publicClient) {
+      try {
+        const msgFee = await ctx.publicClient.readContract({
+          address: oftContract,
+          abi: OFT_ABI,
+          functionName: "quoteSend",
+          args: [sendParam, false],
+        }) as { nativeFee: bigint; lzTokenFee: bigint };
+        nativeFee = msgFee.nativeFee;
+      } catch {
+        throw new Error(
+          "Could not get USDT0 bridge fee. Ensure you have enough native token (ETH) for gas and the LayerZero fee."
+        );
+      }
+    } else {
+      nativeFee = 100000000000000n;
+    }
+
+    const providerData = encodeAbiParameters(
+      [
+        { type: "uint32" },
+        { type: "bytes32" },
+        { type: "uint256" },
+        { type: "bytes" },
+        { type: "bytes" },
+        { type: "bytes" },
+      ],
+      [dstEid, recipientBytes32, minAmountLD, extraOptions, composeMsg, oftCmd]
+    );
+
+    const hash = await ctx.writeContractAsync({
+      address: aggregator,
+      abi: AGGREGATOR_ABI,
+      functionName: "bridge",
+      args: [
+        PROVIDER_IDS.usdt0,
+        oftContract,
+        params.amount,
+        BigInt(params.toChain),
+        recipientBytes32,
+        providerData,
+      ],
+      value: nativeFee,
+      chainId: params.fromChain,
+    });
+
+    return { hash };
   }
 
   async getStatus(

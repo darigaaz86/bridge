@@ -3,14 +3,21 @@ import {
   CCTP_DOMAIN_IDS,
   CCTP_IRIS_API,
   AGGREGATOR_CONTRACTS,
+  CCTP_FORWARDING_SERVICE_HOOK_DATA,
+  PROVIDER_IDS,
 } from "@/config/contracts";
 import { CHAIN_CONFIG } from "@/config/chains";
 import { PROVIDER_NAMES } from "@/config/constants";
+import { getTokenAddressEVM } from "@/config/tokens";
+import { pad, encodeAbiParameters } from "viem";
+import { AGGREGATOR_ABI } from "@/abi/aggregator";
 import type {
   IBridgeAdapter,
   BridgeParams,
   BridgeQuote,
   TransactionStatus,
+  ExecuteContext,
+  ExecuteResult,
 } from "./types";
 
 /** Fee tier from Circle fee API (forwardFee in 6-decimal USDC units) */
@@ -161,6 +168,57 @@ class CCTPAdapter implements IBridgeAdapter {
 
   getApprovalAddress(fromChain: number): `0x${string}` | undefined {
     return AGGREGATOR_CONTRACTS[fromChain];
+  }
+
+  getApproveAmount(params: BridgeParams, quote: BridgeQuote): bigint {
+    return quote.inputAmount; // CCTP approves inputAmount (amount + bridgeFee)
+  }
+
+  async execute(
+    params: BridgeParams,
+    quote: BridgeQuote,
+    ctx: ExecuteContext,
+  ): Promise<ExecuteResult> {
+    const tokenAddress = getTokenAddressEVM("USDC", params.fromChain);
+    const aggregator = AGGREGATOR_CONTRACTS[params.fromChain];
+    const destDomain = CCTP_DOMAIN_IDS[params.toChain];
+
+    if (!tokenAddress || !aggregator || destDomain === undefined) {
+      throw new Error("CCTP not supported for this route");
+    }
+
+    const recipientBytes32 = pad(params.recipient as `0x${string}`, { size: 32 });
+    const totalToBurn = quote.inputAmount;
+    const maxFee = quote.bridgeFee;
+    const minFinalityThreshold = quote.cctpFast ? 1000 : 2000;
+
+    const providerData = encodeAbiParameters(
+      [
+        { type: "uint32" },
+        { type: "bytes32" },
+        { type: "uint256" },
+        { type: "uint32" },
+        { type: "bytes" },
+      ],
+      [destDomain, recipientBytes32, maxFee, minFinalityThreshold, CCTP_FORWARDING_SERVICE_HOOK_DATA]
+    );
+
+    const hash = await ctx.writeContractAsync({
+      address: aggregator,
+      abi: AGGREGATOR_ABI,
+      functionName: "bridge",
+      args: [
+        PROVIDER_IDS.cctp,
+        tokenAddress,
+        totalToBurn,
+        BigInt(params.toChain),
+        recipientBytes32,
+        providerData,
+      ],
+      chainId: params.fromChain,
+    });
+
+    return { hash };
   }
 
   async getStatus(

@@ -92,8 +92,7 @@ export function BridgeCard() {
     error: txError,
     bridge,
     reset,
-    nearIntentsDepositAddress,
-    nearIntentsDepositMemo,
+    executeMeta,
   } = useBridgeTransaction(
     selectedQuote,
     fromChain,
@@ -124,12 +123,12 @@ export function BridgeCard() {
           onClose={reset}
           depositAddress={
             selectedQuote.provider === "near-intents"
-              ? nearIntentsDepositAddress
+              ? executeMeta?.depositAddress
               : undefined
           }
           depositMemo={
             selectedQuote.provider === "near-intents"
-              ? nearIntentsDepositMemo
+              ? executeMeta?.depositMemo
               : undefined
           }
         />
