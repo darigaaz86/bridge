@@ -14,12 +14,14 @@ const PROVIDER_ICONS: Record<string, string> = {
   cctp: "C",
   usdt0: "U",
   "near-intents": "N",
+  across: "A",
 };
 
 const PROVIDER_COLORS: Record<string, string> = {
   cctp: "#3693FF",
   usdt0: "#26A17B",
   "near-intents": "#00EC97",
+  across: "#6CF9D8",
 };
 
 export function RouteDisplay({

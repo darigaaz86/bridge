@@ -403,7 +403,7 @@ export function BridgeCard() {
 
         {/* Powered by line */}
         <p className="text-center text-xs text-[var(--muted)]/70 pt-2 border-t border-[var(--border)]/50">
-          Powered by CCTP, USDT0 (LayerZero), and NEAR Intents
+          Powered by CCTP, USDT0 (LayerZero), NEAR Intents, and Across
         </p>
       </div>
     </div>

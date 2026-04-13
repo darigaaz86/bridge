@@ -20,6 +20,7 @@ export const PROVIDER_NAMES = {
   cctp: "Circle CCTP",
   usdt0: "USDT0 (LayerZero)",
   "near-intents": "NEAR Intents",
+  across: "Across Protocol",
 } as const;
 
 // WalletConnect Project ID (get yours at https://cloud.walletconnect.com)

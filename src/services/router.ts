@@ -1,10 +1,11 @@
 import { cctpAdapter } from "./cctp";
 import { usdt0Adapter } from "./usdt0";
 import { nearIntentsAdapter } from "./nearIntents";
+import { acrossAdapter } from "./across";
 import type { IBridgeAdapter, BridgeParams, BridgeQuote } from "./types";
 
 // All registered bridge adapters
-const adapters: IBridgeAdapter[] = [cctpAdapter, usdt0Adapter, nearIntentsAdapter];
+const adapters: IBridgeAdapter[] = [cctpAdapter, usdt0Adapter, nearIntentsAdapter, acrossAdapter];
 
 /**
  * Get all quotes from supported adapters for a given route.
