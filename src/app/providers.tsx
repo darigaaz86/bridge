@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { wagmiConfig } from "@/config/wagmi";
 
 import { TronLinkProvider } from "@/contexts/TronLinkContext";
+import { DamAutoConnect } from "@/components/DamAutoConnect";
 import "@rainbow-me/rainbowkit/styles.css";
 
 const queryClient = new QueryClient();
@@ -15,6 +16,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <TronLinkProvider>
+        <DamAutoConnect />
         <RainbowKitProvider
           theme={darkTheme({
             accentColor: "#FF8800",

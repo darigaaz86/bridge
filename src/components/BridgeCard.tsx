@@ -15,6 +15,7 @@ import { useBridgeTransaction } from "@/hooks/useBridgeTransaction";
 import { useAggregatorFeeBps } from "@/hooks/useAggregatorFeeBps";
 
 import { useTronLink } from "@/contexts/TronLinkContext";
+import { useDamContext } from "@/hooks/useDamContext";
 import { DEFAULT_SLIPPAGE_BPS } from "@/config/constants";
 import { TRON_CHAIN_ID } from "@/config/chains";
 import { getTokensForChain } from "@/config/tokens";
@@ -34,6 +35,7 @@ export function BridgeCard() {
   const [preferFastTransfer, setPreferFastTransfer] = useState(false);
 
   const { tronAddress, isTronConnected, isTronAvailable, connectTron, disconnectTron } = useTronLink();
+  const damCtx = useDamContext();
   const aggregatorFeeBps = useAggregatorFeeBps(fromChain);
   const [customRecipient, setCustomRecipient] = useState("");
   const [useCustomRecipient, setUseCustomRecipient] = useState(false);
@@ -339,7 +341,7 @@ export function BridgeCard() {
               {isTronAvailable ? "Connect Tron" : "TronLink not detected"}
             </button>
           </div>
-        ) : fromChain !== TRON_CHAIN_ID && !isConnected ? (
+        ) : fromChain !== TRON_CHAIN_ID && !isConnected && !damCtx.isDam ? (
           <div className="w-full">
             <ConnectButton.Custom>
               {({ openConnectModal }) => (
