@@ -9,9 +9,9 @@ import {
 } from "wagmi";
 import { ERC20_ABI } from "@/abi/erc20";
 import { getTokenAddressEVM } from "@/config/tokens";
-import { TRON_CHAIN_ID } from "@/config/chains";
+import { TRON_CHAIN_ID, SOLANA_CHAIN_ID } from "@/config/chains";
 import { useTronLink } from "@/contexts/TronLinkContext";
-import { AGGREGATOR_CONTRACTS } from "@/config/contracts";
+import { useSolanaWallet } from "@/contexts/SolanaWalletContext";
 import { getAdapter } from "@/services/router";
 import type { BridgeQuote, TransactionState, ExecuteContext } from "@/services/types";
 
@@ -41,12 +41,17 @@ export function useBridgeTransaction(
 
   const { address } = useAccount();
   const { tronAddress } = useTronLink();
+  const { solanaAddress, solanaWallet } = useSolanaWallet();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient({ chainId: fromChain });
 
   const bridge = useCallback(async () => {
-    const sender = fromChain === TRON_CHAIN_ID ? tronAddress : address;
+    const sender = fromChain === SOLANA_CHAIN_ID
+      ? solanaAddress
+      : fromChain === TRON_CHAIN_ID
+        ? tronAddress
+        : address;
     if (!quote || !sender || !recipient) return;
 
     const adapter = getAdapter(quote.provider);
@@ -61,12 +66,12 @@ export function useBridgeTransaction(
 
       const params = { fromChain, toChain, fromToken, toToken, amount, recipient };
 
-      // Auto-approve if needed
+      // Auto-approve if needed (skip for non-EVM chains)
       const needsApproval = adapter.needsApproval
         ? adapter.needsApproval(fromChain)
         : true;
 
-      if (needsApproval) {
+      if (needsApproval && fromChain !== SOLANA_CHAIN_ID) {
         await switchChainAsync({ chainId: fromChain });
         const tokenAddr = getTokenAddressEVM(fromToken, fromChain);
         const spender = adapter.getApprovalAddress(fromChain);
@@ -98,6 +103,8 @@ export function useBridgeTransaction(
         publicClient: publicClient as unknown as ExecuteContext["publicClient"],
         evmAddress: address,
         tronAddress: tronAddress ?? undefined,
+        solanaWallet: solanaWallet as unknown as ExecuteContext["solanaWallet"],
+        solanaAddress: solanaAddress ?? undefined,
       };
 
       // Delegate to adapter
@@ -117,7 +124,7 @@ export function useBridgeTransaction(
         setError(errorMessage);
       }
     }
-  }, [quote, address, tronAddress, recipient, fromChain, toChain, fromToken, toToken, amount, writeContractAsync, switchChainAsync, publicClient]);
+  }, [quote, address, tronAddress, solanaAddress, solanaWallet, recipient, fromChain, toChain, fromToken, toToken, amount, writeContractAsync, switchChainAsync, publicClient]);
 
   const reset = useCallback(() => {
     setState("idle");

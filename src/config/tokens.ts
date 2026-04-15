@@ -1,5 +1,5 @@
 import { mainnet, arbitrum, base, optimism, polygon, avalanche, bsc, linea } from "wagmi/chains";
-import { TRON_CHAIN_ID } from "./chains";
+import { TRON_CHAIN_ID, SOLANA_CHAIN_ID } from "./chains";
 
 // CoinGecko CDN (small size for token logos)
 const CG = "https://coin-images.coingecko.com/coins/images";
@@ -28,6 +28,7 @@ export const TOKENS: Record<string, TokenConfig> = {
       [avalanche.id]: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
       [bsc.id]: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
       [linea.id]: "0x176211869cA2b568f2A7D4EE941E073a821EE1ff",
+      [SOLANA_CHAIN_ID]: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
     },
   },
   USDT: {
@@ -45,6 +46,7 @@ export const TOKENS: Record<string, TokenConfig> = {
       [bsc.id]: "0x55d398326f99059fF775485246999027B3197955",
       [linea.id]: "0xA219439258ca9da29E9Cc4cE5596924745e12B93",
       [TRON_CHAIN_ID]: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", // TRC20 USDT
+      [SOLANA_CHAIN_ID]: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // SPL USDT
     },
   },
   USDT0: {
@@ -74,13 +76,18 @@ export function isTronChain(chainId: number): boolean {
   return chainId === TRON_CHAIN_ID;
 }
 
+/** True for Solana (non-EVM); use for Solana wallet adapter flows. */
+export function isSolanaChain(chainId: number): boolean {
+  return chainId === SOLANA_CHAIN_ID;
+}
+
 /** Return token address as EVM 0x or undefined if not EVM. */
 export function getTokenAddressEVM(
   symbol: string,
   chainId: number
 ): `0x${string}` | undefined {
   const addr = getTokenAddress(symbol, chainId);
-  if (!addr || isTronChain(chainId) || !addr.startsWith("0x")) return undefined;
+  if (!addr || isTronChain(chainId) || isSolanaChain(chainId) || !addr.startsWith("0x")) return undefined;
   return addr as `0x${string}`;
 }
 

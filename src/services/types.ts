@@ -62,6 +62,13 @@ export interface ExecuteContext {
   evmAddress?: string;
   /** Connected Tron address */
   tronAddress?: string;
+  /** Solana wallet adapter state — used for signing SPL token transfers */
+  solanaWallet?: {
+    publicKey: { toBase58: () => string; toBuffer: () => Buffer };
+    sendTransaction: (tx: unknown, connection: unknown) => Promise<string>;
+  } | null;
+  /** Connected Solana address (base58) */
+  solanaAddress?: string;
 }
 
 /** Result returned by adapter.execute() */

@@ -5,11 +5,13 @@ import {
   AGGREGATOR_CONTRACTS,
   PROVIDER_IDS,
 } from "@/config/contracts";
-import { CHAIN_CONFIG, TRON_CHAIN_ID } from "@/config/chains";
+import { CHAIN_CONFIG, TRON_CHAIN_ID, SOLANA_CHAIN_ID } from "@/config/chains";
 import { PROVIDER_NAMES, DEFAULT_SLIPPAGE_BPS } from "@/config/constants";
 import { getTokenAddress, getTokenAddressEVM } from "@/config/tokens";
 import { pad, encodeAbiParameters } from "viem";
 import { AGGREGATOR_ABI } from "@/abi/aggregator";
+import { buildSplTransferTransaction } from "@/lib/solana";
+import { Connection, PublicKey } from "@solana/web3.js";
 import type {
   IBridgeAdapter,
   BridgeParams,
@@ -39,6 +41,9 @@ const NEAR_INTENTS_ASSET_IDS: Record<string, string> = {
   "56:USDT": "nep245:v2_1.omni.hot.tg:56_2CMMyVTGZkeyNZTSvS5sarzfir6g",
   // Tron (chainId 195) – 1Click assetId for TRC20 USDT
   "195:USDT": "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near",
+  // Solana (chainId 501) – 1Click assetId for SPL USDC/USDT
+  "501:USDC": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+  "501:USDT": "nep141:sol-c800a4bd850783ccb82c2b2c7e84175443606352.omft.near",
 };
 
 function get1ClickAssetId(chainId: number, symbol: string): string | undefined {
@@ -102,21 +107,27 @@ class NearIntentsAdapter implements IBridgeAdapter {
       }
 
       // 1Click expects recipient = destination chain, refundTo = origin chain (refund goes back to sender)
+      const SOLANA_PLACEHOLDER = "11111111111111111111111111111111";
       const recipient =
         params.recipient ||
         (params.toChain === TRON_CHAIN_ID
           ? "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
-          : "0x0000000000000000000000000000000000000001");
+          : params.toChain === SOLANA_CHAIN_ID
+            ? SOLANA_PLACEHOLDER
+            : "0x0000000000000000000000000000000000000001");
       const refundTo =
         params.refundTo ||
         (params.fromChain === TRON_CHAIN_ID
           ? "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
-          : "0x0000000000000000000000000000000000000001");
+          : params.fromChain === SOLANA_CHAIN_ID
+            ? SOLANA_PLACEHOLDER
+            : "0x0000000000000000000000000000000000000001");
       const deadline = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 min from now
 
       // On EVM chains, the aggregator deducts feeBps before forwarding to 1Click.
       // Quote with the post-fee amount so the displayed output matches reality.
-      const hasAggregator = params.fromChain !== TRON_CHAIN_ID && !!AGGREGATOR_CONTRACTS[params.fromChain];
+      // Tron and Solana have no aggregator contract, so platformFeeAmount is 0.
+      const hasAggregator = params.fromChain !== TRON_CHAIN_ID && params.fromChain !== SOLANA_CHAIN_ID && !!AGGREGATOR_CONTRACTS[params.fromChain];
       const feeBps = params.platformFeeBps ?? 5;
       const platformFeeAmount = hasAggregator
         ? (params.amount * BigInt(feeBps)) / 10000n
@@ -192,8 +203,8 @@ class NearIntentsAdapter implements IBridgeAdapter {
   }
 
   needsApproval(fromChain: number): boolean {
-    // Tron uses direct TRC20 transfer, no EVM approval needed
-    return fromChain !== TRON_CHAIN_ID;
+    // Tron and Solana use direct token transfers, no EVM approval needed
+    return fromChain !== TRON_CHAIN_ID && fromChain !== SOLANA_CHAIN_ID;
   }
 
   async execute(
@@ -203,6 +214,9 @@ class NearIntentsAdapter implements IBridgeAdapter {
   ): Promise<ExecuteResult> {
     if (params.fromChain === TRON_CHAIN_ID) {
       return this.executeTron(params, ctx);
+    }
+    if (params.fromChain === SOLANA_CHAIN_ID) {
+      return this.executeSolana(params, ctx);
     }
     return this.executeEvm(params, ctx);
   }
@@ -302,6 +316,56 @@ class NearIntentsAdapter implements IBridgeAdapter {
 
     return {
       hash,
+      meta: {
+        depositAddress: execQuote.depositAddress,
+        ...(execQuote.depositMemo && { depositMemo: execQuote.depositMemo }),
+      },
+    };
+  }
+
+  private async executeSolana(
+    params: BridgeParams,
+    ctx: ExecuteContext,
+  ): Promise<ExecuteResult> {
+    if (!ctx.solanaWallet?.publicKey || !ctx.solanaWallet?.sendTransaction) {
+      throw new Error("Solana wallet not connected. Please connect your Solana wallet.");
+    }
+
+    const execQuote = await this.getExecutionQuote({
+      ...params,
+      refundTo: ctx.solanaAddress ?? undefined,
+    });
+
+    console.log(TAG, "Solana execQuote", {
+      depositAddress: execQuote.depositAddress,
+      depositMemo: execQuote.depositMemo,
+      amountIn: execQuote.amountIn.toString(),
+    });
+
+    const mintAddress = getTokenAddress(params.fromToken, params.fromChain);
+    if (!mintAddress) throw new Error("Unsupported token for Solana");
+
+    const connection = new Connection("https://api.mainnet-beta.solana.com");
+    const senderPubkey = new PublicKey(ctx.solanaWallet.publicKey.toBase58());
+
+    const tx = await buildSplTransferTransaction(
+      connection,
+      senderPubkey,
+      execQuote.depositAddress,
+      mintAddress,
+      execQuote.amountIn,
+    );
+
+    const txSignature = await ctx.solanaWallet.sendTransaction(tx, connection);
+
+    try {
+      await this.submitDepositTx(txSignature, execQuote.depositAddress, execQuote.depositMemo);
+    } catch {
+      // Non-fatal
+    }
+
+    return {
+      hash: txSignature,
       meta: {
         depositAddress: execQuote.depositAddress,
         ...(execQuote.depositMemo && { depositMemo: execQuote.depositMemo }),
@@ -415,16 +479,21 @@ class NearIntentsAdapter implements IBridgeAdapter {
       );
     }
 
+    const SOLANA_PLACEHOLDER = "11111111111111111111111111111111";
     const recipient =
       params.recipient ||
       (params.toChain === TRON_CHAIN_ID
         ? "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
-        : "0x0000000000000000000000000000000000000001");
+        : params.toChain === SOLANA_CHAIN_ID
+          ? SOLANA_PLACEHOLDER
+          : "0x0000000000000000000000000000000000000001");
     const refundTo =
       params.refundTo ||
       (params.fromChain === TRON_CHAIN_ID
         ? "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb"
-        : "0x0000000000000000000000000000000000000001");
+        : params.fromChain === SOLANA_CHAIN_ID
+          ? SOLANA_PLACEHOLDER
+          : "0x0000000000000000000000000000000000000001");
     const deadline = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
     const body = {

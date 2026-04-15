@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { wagmiConfig } from "@/config/wagmi";
 
 import { TronLinkProvider } from "@/contexts/TronLinkContext";
+import { SolanaWalletProvider } from "@/contexts/SolanaWalletContext";
 import { DamAutoConnect } from "@/components/DamAutoConnect";
 import { useDamContext } from "@/hooks/useDamContext";
 import "@rainbow-me/rainbowkit/styles.css";
@@ -23,6 +24,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <TronLinkProvider>
+        <SolanaWalletProvider>
         <DamAutoConnectWrapper />
         <RainbowKitProvider
           theme={darkTheme({
@@ -34,6 +36,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         >
           {children}
         </RainbowKitProvider>
+        </SolanaWalletProvider>
         </TronLinkProvider>
       </QueryClientProvider>
     </WagmiProvider>

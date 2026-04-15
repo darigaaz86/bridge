@@ -15,11 +15,13 @@ import { useBridgeTransaction } from "@/hooks/useBridgeTransaction";
 import { useAggregatorFeeBps } from "@/hooks/useAggregatorFeeBps";
 
 import { useTronLink } from "@/contexts/TronLinkContext";
+import { useSolanaWallet } from "@/contexts/SolanaWalletContext";
 import { useDamContext } from "@/hooks/useDamContext";
 import { DEFAULT_SLIPPAGE_BPS } from "@/config/constants";
-import { TRON_CHAIN_ID } from "@/config/chains";
+import { TRON_CHAIN_ID, SOLANA_CHAIN_ID } from "@/config/chains";
 import { getTokensForChain } from "@/config/tokens";
 import { cn } from "@/lib/utils";
+import { isValidSolanaAddress } from "@/lib/solana";
 import { mainnet, arbitrum } from "wagmi/chains";
 
 export function BridgeCard() {
@@ -35,24 +37,43 @@ export function BridgeCard() {
   const [preferFastTransfer, setPreferFastTransfer] = useState(false);
 
   const { tronAddress, isTronConnected, isTronAvailable, connectTron, disconnectTron } = useTronLink();
+  const { solanaAddress, isSolanaConnected, isSolanaAvailable, connectSolana } = useSolanaWallet();
   const damCtx = useDamContext();
   const aggregatorFeeBps = useAggregatorFeeBps(fromChain);
   const [customRecipient, setCustomRecipient] = useState("");
   const [useCustomRecipient, setUseCustomRecipient] = useState(false);
-  const selfRecipient = toChain === TRON_CHAIN_ID ? (tronAddress ?? "") : (address ?? "");
+  const selfRecipient = toChain === SOLANA_CHAIN_ID
+    ? (solanaAddress ?? "")
+    : toChain === TRON_CHAIN_ID
+      ? (tronAddress ?? "")
+      : (address ?? "");
   const recipient = useCustomRecipient && customRecipient.trim() ? customRecipient.trim() : selfRecipient;
-  const sender = fromChain === TRON_CHAIN_ID ? tronAddress : address;
-  const isSenderConnected = fromChain === TRON_CHAIN_ID ? isTronConnected : isConnected;
+  const sender = fromChain === SOLANA_CHAIN_ID
+    ? solanaAddress
+    : fromChain === TRON_CHAIN_ID
+      ? tronAddress
+      : address;
+  const isSenderConnected = fromChain === SOLANA_CHAIN_ID
+    ? isSolanaConnected
+    : fromChain === TRON_CHAIN_ID
+      ? isTronConnected
+      : isConnected;
 
-  // Default to USDT when Tron is selected (Tron only supports USDT)
+  // Default token when switching to Tron or Solana if current token not available
   useEffect(() => {
     const fromTokens = getTokensForChain(fromChain);
     const toTokens = getTokensForChain(toChain);
     if (fromChain === TRON_CHAIN_ID && !fromTokens.some((t) => t.symbol === fromToken)) {
       setFromToken("USDT");
     }
+    if (fromChain === SOLANA_CHAIN_ID && !fromTokens.some((t) => t.symbol === fromToken)) {
+      setFromToken("USDC");
+    }
     if (toChain === TRON_CHAIN_ID && !toTokens.some((t) => t.symbol === toToken)) {
       setToToken("USDT");
+    }
+    if (toChain === SOLANA_CHAIN_ID && !toTokens.some((t) => t.symbol === toToken)) {
+      setToToken("USDC");
     }
   }, [fromChain, toChain]);
 
@@ -249,15 +270,26 @@ export function BridgeCard() {
             </button>
           </div>
           {useCustomRecipient ? (
-            <input
-              type="text"
-              value={customRecipient}
-              onChange={(e) => setCustomRecipient(e.target.value)}
-              placeholder={toChain === TRON_CHAIN_ID ? "Tron address (T...)" : "0x..."}
-              spellCheck={false}
-              autoComplete="off"
-              className="w-full bg-transparent text-sm text-white placeholder:text-[var(--muted)]/50 outline-none font-mono"
-            />
+            <>
+              <input
+                type="text"
+                value={customRecipient}
+                onChange={(e) => setCustomRecipient(e.target.value)}
+                placeholder={
+                  toChain === SOLANA_CHAIN_ID
+                    ? "Solana address"
+                    : toChain === TRON_CHAIN_ID
+                      ? "Tron address (T...)"
+                      : "0x..."
+                }
+                spellCheck={false}
+                autoComplete="off"
+                className="w-full bg-transparent text-sm text-white placeholder:text-[var(--muted)]/50 outline-none font-mono"
+              />
+              {toChain === SOLANA_CHAIN_ID && customRecipient.trim() && !isValidSolanaAddress(customRecipient.trim()) && (
+                <p className="text-xs text-[var(--danger)] mt-1">Invalid Solana address</p>
+              )}
+            </>
           ) : (
             <p className="text-sm text-white font-mono truncate">
               {selfRecipient || "Connect wallet"}
@@ -321,7 +353,27 @@ export function BridgeCard() {
         )}
 
         {/* Action Button */}
-        {fromChain === TRON_CHAIN_ID && !isTronConnected ? (
+        {fromChain === SOLANA_CHAIN_ID && !isSolanaConnected ? (
+          <div className="w-full space-y-2">
+            {!isSolanaAvailable && (
+              <p className="text-xs text-[var(--muted)] text-center">
+                Install a Solana wallet extension (Phantom or Solflare) to bridge from Solana.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => connectSolana().catch((e) => console.error(e))}
+              disabled={!isSolanaAvailable}
+              className={cn(
+                "w-full py-4 rounded-xl font-semibold text-sm",
+                "bg-[var(--primary)] hover:bg-[var(--primary-hover)]",
+                "text-white transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              )}
+            >
+              {isSolanaAvailable ? "Connect Solana" : "Solana wallet not detected"}
+            </button>
+          </div>
+        ) : fromChain === TRON_CHAIN_ID && !isTronConnected ? (
           <div className="w-full space-y-2">
             {!isTronAvailable && (
               <p className="text-xs text-[var(--muted)] text-center">
@@ -341,7 +393,7 @@ export function BridgeCard() {
               {isTronAvailable ? "Connect Tron" : "TronLink not detected"}
             </button>
           </div>
-        ) : fromChain !== TRON_CHAIN_ID && !isConnected && !damCtx.isDam ? (
+        ) : fromChain !== TRON_CHAIN_ID && fromChain !== SOLANA_CHAIN_ID && !isConnected && !damCtx.isDam ? (
           <div className="w-full">
             <ConnectButton.Custom>
               {({ openConnectModal }) => (
@@ -380,11 +432,15 @@ export function BridgeCard() {
           >
             No routes available
           </button>
-        ) : !recipient && (fromChain === TRON_CHAIN_ID || toChain === TRON_CHAIN_ID) ? (
+        ) : !recipient && (fromChain === TRON_CHAIN_ID || toChain === TRON_CHAIN_ID || fromChain === SOLANA_CHAIN_ID || toChain === SOLANA_CHAIN_ID) ? (
           <p className="text-center py-3 text-sm text-[var(--muted)]">
-            {toChain === TRON_CHAIN_ID
-              ? "Connect Tron to receive on Tron."
-              : "Connect Tron to send from Tron."}
+            {toChain === SOLANA_CHAIN_ID
+              ? "Connect Solana wallet or enter a Solana recipient address."
+              : toChain === TRON_CHAIN_ID
+                ? "Connect Tron to receive on Tron."
+                : fromChain === SOLANA_CHAIN_ID
+                  ? "Connect Solana to send from Solana."
+                  : "Connect Tron to send from Tron."}
           </p>
         ) : (
           <button

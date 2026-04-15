@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { cn, shortenAddress } from "@/lib/utils";
 import { useTronLink } from "@/contexts/TronLinkContext";
-import { CHAIN_CONFIG } from "@/config/chains";
-import { TRON_CHAIN_ID } from "@/config/chains";
+import { useSolanaWallet } from "@/contexts/SolanaWalletContext";
+import { CHAIN_CONFIG, TRON_CHAIN_ID, SOLANA_CHAIN_ID } from "@/config/chains";
 import { INDEXER_UI_URL } from "@/config/constants";
 
 const walletButtonClass =
@@ -15,7 +15,9 @@ const walletButtonClass =
 export function Header() {
   const pathname = usePathname();
   const { tronAddress, isTronConnected, isTronAvailable, connectTron, disconnectTron } = useTronLink();
+  const { solanaAddress, isSolanaConnected, isSolanaAvailable, connectSolana, disconnectSolana } = useSolanaWallet();
   const tronConfig = CHAIN_CONFIG[TRON_CHAIN_ID];
+  const solanaConfig = CHAIN_CONFIG[SOLANA_CHAIN_ID];
 
   return (
     <header className="w-full border-b border-[var(--border)] bg-[var(--card)]/50 backdrop-blur-sm">
@@ -56,8 +58,9 @@ export function Header() {
           </a>
         </nav>
 
-        {/* Wallet Connect: Tron + EVM (same style for both) */}
+        {/* Wallet Connect: Tron + Solana + EVM (same style for all) */}
         <div className="flex items-center gap-2">
+          {/* Tron wallet button */}
           {isTronConnected && tronAddress ? (
             <div
               className={cn(walletButtonClass, "justify-between")}
@@ -114,6 +117,65 @@ export function Header() {
               {isTronAvailable ? "Connect Tron" : "Tron"}
             </button>
           )}
+
+          {/* Solana wallet button */}
+          {isSolanaConnected && solanaAddress ? (
+            <div
+              className={cn(walletButtonClass, "justify-between")}
+              title={solanaAddress}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {solanaConfig?.icon && (
+                  <div
+                    className="relative w-6 h-6 rounded-full flex-shrink-0 overflow-hidden"
+                    style={{ backgroundColor: solanaConfig.color }}
+                  >
+                    <img
+                      src={solanaConfig.icon}
+                      alt=""
+                      className="absolute inset-0 w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                )}
+                <span className="tabular-nums truncate">{shortenAddress(solanaAddress, 4)}</span>
+              </div>
+              <button
+                type="button"
+                onClick={disconnectSolana}
+                className="text-[var(--muted)] hover:text-white transition-colors p-0.5 shrink-0"
+                title="Disconnect Solana"
+              >
+                <span className="sr-only">Disconnect</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => connectSolana().catch(() => {})}
+              disabled={!isSolanaAvailable}
+              className={cn(walletButtonClass, "justify-center", !isSolanaAvailable && "opacity-50 cursor-not-allowed")}
+            >
+              {solanaConfig?.icon && (
+                <div
+                  className="relative w-6 h-6 rounded-full flex-shrink-0 overflow-hidden"
+                  style={{ backgroundColor: solanaConfig?.color ?? "#9945FF" }}
+                >
+                  <img
+                    src={solanaConfig.icon}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+              {isSolanaAvailable ? "Connect Solana" : "Solana"}
+            </button>
+          )}
+
           <ConnectButton
             chainStatus="icon"
             showBalance={false}

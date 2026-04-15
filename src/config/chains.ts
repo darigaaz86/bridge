@@ -12,6 +12,9 @@ import {
 /** Tron mainnet (non-EVM); used for NEAR Intents only. Not in wagmi. */
 export const TRON_CHAIN_ID = 195;
 
+/** Solana mainnet (non-EVM); used for NEAR Intents only. Not in wagmi. */
+export const SOLANA_CHAIN_ID = 501;
+
 export interface ChainConfig {
   id: number;
   name: string;
@@ -117,6 +120,15 @@ export const CHAIN_CONFIG: Record<number, ChainConfig> = {
     nativeToken: "TRX",
     explorer: "https://tronscan.org",
     color: "#FF0013",
+  },
+  [SOLANA_CHAIN_ID]: {
+    id: SOLANA_CHAIN_ID,
+    name: "Solana",
+    shortName: "SOL",
+    icon: `${CG}/4128/small/solana.png`,
+    nativeToken: "SOL",
+    explorer: "https://solscan.io",
+    color: "#9945FF",
   },
 };
 
