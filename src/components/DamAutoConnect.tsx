@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useConnect } from "wagmi";
 import { damWalletConnector } from "@/lib/damConnector";
 import type { EIP1193Provider } from "@/lib/miniAppSdk";
@@ -12,9 +12,11 @@ interface DamAutoConnectProps {
 
 export function DamAutoConnect({ provider, address }: DamAutoConnectProps) {
   const { connect } = useConnect();
+  const hasConnected = useRef(false);
 
   useEffect(() => {
-    if (!address) return;
+    if (hasConnected.current) return;
+    hasConnected.current = true;
     connect({
       connector: damWalletConnector({
         provider,

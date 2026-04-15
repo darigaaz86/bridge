@@ -38,6 +38,9 @@ class MiniAppSDK {
 
       const handler = (event: MessageEvent) => {
         if (event.data?.type !== 'context') return
+        // Reject null origin (sandboxed iframes without allow-same-origin)
+        // and same-origin messages (not from a parent frame)
+        if (event.origin === 'null' || event.origin === window.location.origin) return
         clearTimeout(timer)
         window.removeEventListener('message', handler)
         this.parentOrigin = event.origin
@@ -74,7 +77,8 @@ class MiniAppSDK {
     }
     if (this.cachedProvider) return this.cachedProvider
 
-    const targetOrigin = this.parentOrigin ?? '*'
+    const targetOrigin = this.parentOrigin!
+    const parentOrigin = this.parentOrigin
 
     const pendingRequests = new Map<string, {
       resolve: (value: unknown) => void
@@ -83,6 +87,7 @@ class MiniAppSDK {
     }>()
 
     const responseHandler = (event: MessageEvent) => {
+      if (event.origin !== parentOrigin) return
       if (event.data?.type !== 'wallet_response') return
       const { requestId, result, error } = event.data
       const pending = pendingRequests.get(requestId)
