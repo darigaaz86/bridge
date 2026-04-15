@@ -1,9 +1,9 @@
 {
-  "id": "qorebridge",
   "name": "QoreBridge",
-  "description": "Cross-chain USDC/USDT bridge powered by CCTP, USDT0, NEAR Intents, and Across",
-  "version": "1.0.0",
-  "entry": "/",
-  "requested_scopes": ["wallet:sign"],
-  "icon": "/icon.png"
+  "description": "Cross-chain USDC/USDT bridge — route through CCTP, USDT0, NEAR Intents, and Across",
+  "icon_url": "https://bridge.qore3.com/icon.svg",
+  "iframe_url": "https://bridge.qore3.com",
+  "required_scopes": ["wallet:read", "wallet:sign"],
+  "optional_scopes": ["identity:read"],
+  "categories": ["defi", "bridge"]
 }

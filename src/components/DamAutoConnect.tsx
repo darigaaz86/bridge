@@ -2,23 +2,27 @@
 
 import { useEffect } from "react";
 import { useConnect } from "wagmi";
-import { useDamContext } from "@/hooks/useDamContext";
 import { damWalletConnector } from "@/lib/damConnector";
+import type { EIP1193Provider } from "@/lib/miniAppSdk";
 
-export function DamAutoConnect() {
-  const damCtx = useDamContext();
+interface DamAutoConnectProps {
+  provider: EIP1193Provider;
+  address: string;
+}
+
+export function DamAutoConnect({ provider, address }: DamAutoConnectProps) {
   const { connect } = useConnect();
 
   useEffect(() => {
-    if (!damCtx.isDam || !damCtx.walletAddress) return;
+    if (!address) return;
     connect({
       connector: damWalletConnector({
-        provider: damCtx.provider,
-        address: damCtx.walletAddress as `0x${string}`,
+        provider,
+        address: address as `0x${string}`,
       }),
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [damCtx.isDam]);
+  }, []);
 
   return null;
 }

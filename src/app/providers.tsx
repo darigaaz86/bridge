@@ -7,16 +7,23 @@ import { wagmiConfig } from "@/config/wagmi";
 
 import { TronLinkProvider } from "@/contexts/TronLinkContext";
 import { DamAutoConnect } from "@/components/DamAutoConnect";
+import { useDamContext } from "@/hooks/useDamContext";
 import "@rainbow-me/rainbowkit/styles.css";
 
 const queryClient = new QueryClient();
+
+function DamAutoConnectWrapper() {
+  const damCtx = useDamContext();
+  if (!damCtx.isDam) return null;
+  return <DamAutoConnect provider={damCtx.provider} address={damCtx.walletAddress} />;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <TronLinkProvider>
-        <DamAutoConnect />
+        <DamAutoConnectWrapper />
         <RainbowKitProvider
           theme={darkTheme({
             accentColor: "#FF8800",
