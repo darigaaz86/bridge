@@ -24,6 +24,16 @@ import { cn } from "@/lib/utils";
 import { isValidSolanaAddress } from "@/lib/solana";
 import { mainnet, arbitrum } from "wagmi/chains";
 
+// Fallback decimals for well-known tokens when dynamic token info hasn't loaded yet
+const KNOWN_DECIMALS: Record<string, number> = {
+  USDC: 6, USDT: 6, USDT0: 6, DAI: 18, USDf: 18, USD1: 18,
+  ETH: 18, WETH: 18, WBTC: 8, cbBTC: 8, BTC: 8, xBTC: 8,
+  ARB: 18, OP: 18, BNB: 18, SOL: 9, NEAR: 24, TRX: 6,
+  LINK: 18, UNI: 18, AAVE: 18, GMX: 18, SAFE: 18, KNC: 18,
+  PEPE: 18, SHIB: 18, MOG: 18, TURBO: 18, TRUMP: 18,
+  PENGU: 18, WIF: 6, BOME: 18, BRETT: 18, SPX: 8,
+};
+
 export function BridgeCard() {
   const { address, isConnected } = useAccount();
 
@@ -77,14 +87,16 @@ export function BridgeCard() {
   // Parse amount to bigint using the selected from-token's decimals
   const fromTokenInfo = fromTokens.find((t) => t.symbol === fromToken);
   const toTokenInfo = toTokens.find((t) => t.symbol === toToken);
+  const fromDecimals = fromTokenInfo?.decimals ?? KNOWN_DECIMALS[fromToken] ?? 6;
+  const toDecimals = toTokenInfo?.decimals ?? KNOWN_DECIMALS[toToken] ?? 6;
   const parsedAmount = useMemo(() => {
     try {
       if (!amount || amount === "0" || amount === "") return 0n;
-      return parseUnits(amount, fromTokenInfo?.decimals ?? 6);
+      return parseUnits(amount, fromDecimals);
     } catch {
       return 0n;
     }
-  }, [amount, fromTokenInfo?.decimals]);
+  }, [amount, fromDecimals]);
 
   // Quote params (slippage/platform fee from settings; preferFastTransfer affects CCTP)
   const quoteParams = useMemo(() => {
@@ -241,7 +253,7 @@ export function BridgeCard() {
           <AmountInput
             value={
               selectedQuote
-                ? (Number(selectedQuote.outputAmount) / 10 ** (toTokenInfo?.decimals ?? 6)).toFixed(4)
+                ? (Number(selectedQuote.outputAmount) / 10 ** toDecimals).toFixed(4)
                 : ""
             }
             onChange={() => {}}
@@ -302,6 +314,8 @@ export function BridgeCard() {
             selectedIndex={selectedRouteIndex}
             onSelect={setSelectedRouteIndex}
             isLoading={quotesLoading}
+            fromDecimals={fromDecimals}
+            toDecimals={toDecimals}
           />
         )}
 
@@ -340,7 +354,7 @@ export function BridgeCard() {
 
         {/* Fee Breakdown */}
         {selectedQuote && !quotesLoading && (
-          <FeeBreakdown quote={selectedQuote} fromToken={fromToken} toToken={toToken} feeBps={aggregatorFeeBps} />
+          <FeeBreakdown quote={selectedQuote} fromToken={fromToken} toToken={toToken} feeBps={aggregatorFeeBps} fromDecimals={fromDecimals} toDecimals={toDecimals} />
         )}
 
         {/* Error Display */}

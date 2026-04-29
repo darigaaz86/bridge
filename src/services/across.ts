@@ -1,5 +1,8 @@
 import { CHAIN_CONFIG } from "@/config/chains";
 import { getTokenAddressEVM, TOKENS } from "@/config/tokens";
+import { AGGREGATOR_CONTRACTS, PROVIDER_IDS } from "@/config/contracts";
+import { AGGREGATOR_ABI } from "@/abi/aggregator";
+import { pad, encodeAbiParameters } from "viem";
 import type { TokenInfo } from "@/config/tokens";
 import type {
   IBridgeAdapter,
@@ -11,30 +14,6 @@ import type {
 } from "./types";
 
 const ACROSS_API = "https://app.across.to/api";
-
-// SpokePool ABI — only the depositV3 function we need
-const SPOKE_POOL_ABI = [
-  {
-    name: "depositV3",
-    type: "function",
-    stateMutability: "payable",
-    inputs: [
-      { name: "depositor", type: "address" },
-      { name: "recipient", type: "address" },
-      { name: "inputToken", type: "address" },
-      { name: "outputToken", type: "address" },
-      { name: "inputAmount", type: "uint256" },
-      { name: "outputAmount", type: "uint256" },
-      { name: "destinationChainId", type: "uint256" },
-      { name: "exclusiveRelayer", type: "address" },
-      { name: "quoteTimestamp", type: "uint32" },
-      { name: "fillDeadline", type: "uint32" },
-      { name: "exclusivityDeadline", type: "uint32" },
-      { name: "message", type: "bytes" },
-    ],
-    outputs: [],
-  },
-] as const;
 
 /** Response from /suggested-fees */
 interface AcrossFeeResponse {
@@ -132,14 +111,11 @@ class AcrossAdapter implements IBridgeAdapter {
   }
 
   getApprovalAddress(fromChain: number): `0x${string}` | undefined {
-    // Will be set dynamically from the quote's spokePoolAddress
-    // For now return undefined — execute() handles approval target
-    return undefined;
+    return AGGREGATOR_CONTRACTS[fromChain];
   }
 
-  needsApproval(): boolean {
-    // We handle approval inside execute() since the spender (SpokePool) comes from the API
-    return false;
+  getApproveAmount(params: BridgeParams, _quote: BridgeQuote): bigint {
+    return params.amount;
   }
 
   async execute(
@@ -150,54 +126,58 @@ class AcrossAdapter implements IBridgeAdapter {
     const meta = (quote as BridgeQuote & { _acrossMeta?: Record<string, string> })._acrossMeta;
     if (!meta) throw new Error("Missing Across quote metadata. Please refresh the quote.");
 
-    const inputToken = getTokenAddressEVM(params.fromToken, params.fromChain) as `0x${string}`;
-    const outputToken = getTokenAddressEVM(params.toToken, params.toChain) as `0x${string}`;
+    const aggregator = AGGREGATOR_CONTRACTS[params.fromChain];
+    if (!aggregator) throw new Error("Aggregator not configured for this chain");
+
+    const inputToken = getTokenAddressEVM(params.fromToken, params.fromChain);
+    const outputToken = getTokenAddressEVM(params.toToken, params.toChain);
     const spokePool = meta.spokePoolAddress as `0x${string}`;
 
     if (!inputToken || !outputToken || !spokePool) {
       throw new Error("Across: missing token or SpokePool address");
     }
 
-    // Approve SpokePool to spend input tokens
-    if (ctx.publicClient && ctx.evmAddress) {
-      const currentAllowance = await ctx.publicClient.readContract({
-        address: inputToken,
-        abi: [{ name: "allowance", type: "function", stateMutability: "view", inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }], outputs: [{ name: "", type: "uint256" }] }],
-        functionName: "allowance",
-        args: [ctx.evmAddress as `0x${string}`, spokePool],
-      }) as bigint;
+    const recipientBytes32 = pad(params.recipient as `0x${string}`, { size: 32 });
 
-      if (currentAllowance < params.amount) {
-        await ctx.writeContractAsync({
-          address: inputToken,
-          abi: [{ name: "approve", type: "function", stateMutability: "nonpayable", inputs: [{ name: "spender", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ name: "", type: "bool" }] }],
-          functionName: "approve",
-          args: [spokePool, params.amount],
-          chainId: params.fromChain,
-        });
-      }
-    }
-
-    const depositor = ctx.evmAddress as `0x${string}`;
-    const recipient = params.recipient as `0x${string}`;
-
-    const hash = await ctx.writeContractAsync({
-      address: spokePool,
-      abi: SPOKE_POOL_ABI,
-      functionName: "depositV3",
-      args: [
-        depositor,
-        recipient,
-        inputToken,
+    // Encode provider data for AcrossProvider.executeBridge()
+    const providerData = encodeAbiParameters(
+      [
+        { type: "address" },  // spokePool
+        { type: "address" },  // depositor (will be the AcrossProvider contract)
+        { type: "address" },  // recipient
+        { type: "address" },  // outputToken
+        { type: "uint256" },  // outputAmount
+        { type: "uint256" },  // destinationChainId
+        { type: "address" },  // exclusiveRelayer
+        { type: "uint32" },   // quoteTimestamp
+        { type: "uint32" },   // fillDeadline
+        { type: "uint32" },   // exclusivityDeadline
+      ],
+      [
+        spokePool,
+        aggregator, // depositor = aggregator's AcrossProvider (will be overridden by the provider contract address)
+        params.recipient as `0x${string}`,
         outputToken,
-        params.amount,
         BigInt(meta.outputAmount),
         BigInt(params.toChain),
         meta.exclusiveRelayer as `0x${string}`,
         Number(meta.timestamp),
         Number(meta.fillDeadline),
         Number(meta.exclusivityDeadline),
-        "0x" as `0x${string}`, // empty message
+      ],
+    );
+
+    const hash = await ctx.writeContractAsync({
+      address: aggregator,
+      abi: AGGREGATOR_ABI,
+      functionName: "bridge",
+      args: [
+        PROVIDER_IDS.across,
+        inputToken,
+        params.amount,
+        BigInt(params.toChain),
+        recipientBytes32,
+        providerData,
       ],
       chainId: params.fromChain,
     });

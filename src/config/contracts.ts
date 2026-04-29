@@ -114,6 +114,7 @@ export const PROVIDER_IDS = {
   cctp: "0xf8455f3379434a3ef6559858314c8f61d36412da9937cd3f1de59562deb078e6" as `0x${string}`,
   usdt0: "0x6c586b6e10c133cf1ef94fbd023b9480e32c2e41bbd6948212bbf2507d82eba1" as `0x${string}`,
   "near-intents": "0x3e9fe409e747e9f7a1970485668abf89b634f38b94401f01f39ee3e70e882039" as `0x${string}`,
+  across: "0x72586f379621e0a09286464fa4f6cfa1a201b0834aa94eb8f17feece751f0bd7" as `0x${string}`,
 } as const;
 
 // ============================================================

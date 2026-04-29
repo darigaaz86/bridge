@@ -10,6 +10,7 @@ Solidity smart contracts for the QoreBridge v2 aggregator. Built with [Foundry](
 | `CctpProvider` | Routes USDC via Circle CCTP `TokenMessengerV2.depositForBurnWithHook()` |
 | `Usdt0Provider` | Routes USDT0 via LayerZero `OFT.send()` |
 | `NearIntentsProvider` | Routes tokens to a NEAR Intents deposit address via simple ERC20 transfer |
+| `AcrossProvider` | Routes tokens via Across Protocol `SpokePool.depositV3()` |
 
 ## Build & Test
 

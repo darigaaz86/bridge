@@ -5,7 +5,8 @@
       "QoreBridgeAggregator": "0xb63d7256E75bf9c7d0f1828137F557428e594dfC",
       "CctpProvider": "0x1241139ac8623021E0d2CaDa7be524ACb4766FC3",
       "Usdt0Provider": "0xF6b8F40B50bb2F6D317516DF77a72081a150e444",
-      "NearIntentsProvider": "0xDBC94513c6ff15F1E2305f38ff41cc41fCb83542"
+      "NearIntentsProvider": "0xDBC94513c6ff15F1E2305f38ff41cc41fCb83542",
+      "AcrossProvider": "0xA88681FaBf2019c9441EF7DB40Ba00c24337259b"
     },
     "owner": "0x752010Bc56F4eCC047C29194c0Ea6604B96CD80A",
     "treasury": "0x4132d2B7453D44653bA703dA5CB9c1aE0404Bd03",

@@ -8,9 +8,11 @@ interface FeeBreakdownProps {
   fromToken: string;
   toToken: string;
   feeBps: number;
+  fromDecimals?: number;
+  toDecimals?: number;
 }
 
-export function FeeBreakdown({ quote, fromToken, toToken, feeBps }: FeeBreakdownProps) {
+export function FeeBreakdown({ quote, fromToken, toToken, feeBps, fromDecimals = 6, toDecimals = 6 }: FeeBreakdownProps) {
   const platformFee = (quote.inputAmount * BigInt(feeBps)) / 10000n;
   const feePercent = (feeBps / 100).toFixed(2);
 
@@ -19,7 +21,7 @@ export function FeeBreakdown({ quote, fromToken, toToken, feeBps }: FeeBreakdown
       <div className="flex justify-between text-[var(--muted)]">
         <span>Platform fee ({feePercent}%)</span>
         <span className="text-white">
-          {formatAmount(platformFee, 6, 4)} {fromToken}
+          {formatAmount(platformFee, fromDecimals, 4)} {fromToken}
         </span>
       </div>
 
@@ -27,7 +29,7 @@ export function FeeBreakdown({ quote, fromToken, toToken, feeBps }: FeeBreakdown
         <div className="flex justify-between text-[var(--muted)]">
           <span>Bridge fee</span>
           <span className="text-white">
-            {formatAmount(quote.bridgeFee, 6, 4)} {fromToken}
+            {formatAmount(quote.bridgeFee, fromDecimals, 4)} {fromToken}
           </span>
         </div>
       )}
@@ -47,7 +49,7 @@ export function FeeBreakdown({ quote, fromToken, toToken, feeBps }: FeeBreakdown
       {quote.provider === "cctp" && quote.bridgeFee > 0n && (
         <div className="flex justify-between font-medium text-[var(--primary)]">
           <span>Total from wallet</span>
-          <span>{formatAmount(quote.inputAmount, 6, 4)} {fromToken}</span>
+          <span>{formatAmount(quote.inputAmount, fromDecimals, 4)} {fromToken}</span>
         </div>
       )}
 
@@ -56,7 +58,7 @@ export function FeeBreakdown({ quote, fromToken, toToken, feeBps }: FeeBreakdown
       <div className="flex justify-between font-medium">
         <span className="text-[var(--muted)]">You receive</span>
         <span className="text-white text-sm">
-          {formatAmount(quote.outputAmount, 6, 4)} {toToken}
+          {formatAmount(quote.outputAmount, toDecimals, 4)} {toToken}
         </span>
       </div>
     </div>

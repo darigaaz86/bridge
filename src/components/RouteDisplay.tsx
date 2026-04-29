@@ -8,6 +8,8 @@ interface RouteDisplayProps {
   selectedIndex: number;
   onSelect: (index: number) => void;
   isLoading: boolean;
+  fromDecimals?: number;
+  toDecimals?: number;
 }
 
 const PROVIDER_ICONS: Record<string, string> = {
@@ -29,6 +31,8 @@ export function RouteDisplay({
   selectedIndex,
   onSelect,
   isLoading,
+  fromDecimals = 6,
+  toDecimals = 6,
 }: RouteDisplayProps) {
   if (isLoading) {
     return (
@@ -94,18 +98,18 @@ export function RouteDisplay({
               </div>
               <div className="text-xs text-[var(--muted)] mt-0.5 flex items-center gap-3">
                 <span>{formatTime(quote.estimatedTime)}</span>
-                <span>Fee: {formatAmount(quote.bridgeFee, 6, 4)}</span>
+                <span>Fee: {formatAmount(quote.bridgeFee, fromDecimals, 4)}</span>
               </div>
             </div>
 
             {/* Output amount */}
             <div className="text-right flex-shrink-0">
               <div className="text-sm font-semibold text-white">
-                {formatAmount(quote.outputAmount, 6, 4)}
+                {formatAmount(quote.outputAmount, toDecimals, 4)}
               </div>
               {quote.bridgeFee > 0n && (
                 <div className="text-[10px] text-[var(--muted)]">
-                  Bridge fee: {formatAmount(quote.bridgeFee, 6, 4)}
+                  Bridge fee: {formatAmount(quote.bridgeFee, fromDecimals, 4)}
                 </div>
               )}
             </div>
