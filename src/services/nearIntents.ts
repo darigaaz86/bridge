@@ -2,12 +2,14 @@ import {
   NEAR_INTENTS_QUOTE_URL,
   NEAR_INTENTS_STATUS_URL,
   NEAR_INTENTS_DEPOSIT_SUBMIT_URL,
+  NEAR_INTENTS_TOKENS_URL,
   AGGREGATOR_CONTRACTS,
   PROVIDER_IDS,
 } from "@/config/contracts";
 import { CHAIN_CONFIG, TRON_CHAIN_ID, SOLANA_CHAIN_ID } from "@/config/chains";
 import { PROVIDER_NAMES, DEFAULT_SLIPPAGE_BPS } from "@/config/constants";
 import { getTokenAddress, getTokenAddressEVM } from "@/config/tokens";
+import type { TokenInfo } from "@/config/tokens";
 import { pad, encodeAbiParameters } from "viem";
 import { AGGREGATOR_ABI } from "@/abi/aggregator";
 import { buildSplTransferTransaction } from "@/lib/solana";
@@ -21,11 +23,25 @@ import type {
   ExecuteResult,
 } from "./types";
 
-/**
- * 1Click API expects originAsset/destinationAsset to be assetId from GET /v0/tokens
- * (e.g. nep141:eth-0x...omft.near). Map "chainId:SYMBOL" -> assetId.
- */
-const NEAR_INTENTS_ASSET_IDS: Record<string, string> = {
+// ── Chain allowlist & blockchain name → chainId mapping ──────────────
+// Only tokens on these chains will be loaded from the 1Click API.
+const BLOCKCHAIN_TO_CHAIN_ID: Record<string, number> = {
+  eth: 1,
+  arb: 42161,
+  base: 8453,
+  op: 10,
+  pol: 137,
+  avax: 43114,
+  bsc: 56,
+  tron: 195,
+  sol: 501,
+};
+
+// Only include stablecoin symbols we care about
+const ALLOWED_SYMBOLS = new Set(["USDC", "USDT", "USDT0"]);
+
+// ── Dynamic asset ID map (populated from API, with hardcoded fallback) ──
+const FALLBACK_ASSET_IDS: Record<string, string> = {
   "1:USDC": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
   "1:USDT": "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near",
   "42161:USDC": "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
@@ -39,16 +55,46 @@ const NEAR_INTENTS_ASSET_IDS: Record<string, string> = {
   "43114:USDT": "nep245:v2_1.omni.hot.tg:43114_372BeH7ENZieCaabwkbWkBiTTgXp",
   "56:USDC": "nep245:v2_1.omni.hot.tg:56_2w93GqMcEmQFDru84j3HZZWt557r",
   "56:USDT": "nep245:v2_1.omni.hot.tg:56_2CMMyVTGZkeyNZTSvS5sarzfir6g",
-  // Tron (chainId 195) – 1Click assetId for TRC20 USDT
   "195:USDT": "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near",
-  // Solana (chainId 501) – 1Click assetId for SPL USDC/USDT
   "501:USDC": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
   "501:USDT": "nep141:sol-c800a4bd850783ccb82c2b2c7e84175443606352.omft.near",
 };
 
+let assetIdMap: Record<string, string> = { ...FALLBACK_ASSET_IDS };
+let assetIdMapLoaded = false;
+
+/** Fetch tokens from 1Click API and build the asset ID map filtered by our chain allowlist. */
+async function loadAssetIds(): Promise<void> {
+  if (assetIdMapLoaded) return;
+  try {
+    const res = await fetch(NEAR_INTENTS_TOKENS_URL);
+    if (!res.ok) return;
+    const tokens: Array<{ assetId: string; symbol: string; blockchain: string }> = await res.json();
+    const newMap: Record<string, string> = {};
+    for (const token of tokens) {
+      const chainId = BLOCKCHAIN_TO_CHAIN_ID[token.blockchain];
+      if (!chainId) continue;
+      // Normalize USDT0 → USDT for our map key
+      const symbol = token.symbol === "USDT0" ? "USDT" : token.symbol;
+      const key = `${chainId}:${symbol}`;
+      newMap[key] = token.assetId;
+    }
+    if (Object.keys(newMap).length > 0) {
+      assetIdMap = newMap;
+      console.log("[NEAR Intents] loaded", Object.keys(newMap).length, "asset IDs from API");
+    }
+  } catch {
+    console.warn("[NEAR Intents] failed to load tokens from API, using fallback");
+  }
+  assetIdMapLoaded = true;
+}
+
+// Kick off loading immediately (non-blocking)
+loadAssetIds();
+
 function get1ClickAssetId(chainId: number, symbol: string): string | undefined {
   const key = `${chainId}:${symbol}`;
-  return NEAR_INTENTS_ASSET_IDS[key] ?? (symbol === "USDT0" ? NEAR_INTENTS_ASSET_IDS[`${chainId}:USDT`] : undefined);
+  return assetIdMap[key] ?? (symbol === "USDT0" ? assetIdMap[`${chainId}:USDT`] : undefined);
 }
 
 /** 1Click quote API request body (camelCase, required fields) */
@@ -635,6 +681,46 @@ class NearIntentsAdapter implements IBridgeAdapter {
       sourceTxHash: txHash,
       message: messages[status] ?? "Processing...",
     };
+  }
+
+  async getSupportedTokens(chainId: number): Promise<TokenInfo[]> {
+    try {
+      const res = await fetch(NEAR_INTENTS_TOKENS_URL);
+      if (!res.ok) return [];
+      const tokens: Array<{
+        assetId: string;
+        symbol: string;
+        name: string;
+        blockchain: string;
+        decimals: number;
+        icon?: string;
+        address?: string;
+      }> = await res.json();
+      if (!Array.isArray(tokens)) return [];
+
+      const result: TokenInfo[] = [];
+      for (const token of tokens) {
+        const mappedChainId = BLOCKCHAIN_TO_CHAIN_ID[token.blockchain];
+        // Skip tokens not in our chain allowlist or not matching the requested chain
+        if (mappedChainId === undefined || mappedChainId !== chainId) continue;
+
+        const addresses: Record<number, string> = {};
+        if (token.address) {
+          addresses[chainId] = token.address;
+        }
+
+        result.push({
+          symbol: token.symbol,
+          name: token.name,
+          decimals: token.decimals,
+          icon: token.icon ?? "",
+          addresses,
+        });
+      }
+      return result;
+    } catch {
+      return [];
+    }
   }
 }
 

@@ -3,6 +3,8 @@ import { usdt0Adapter } from "./usdt0";
 import { nearIntentsAdapter } from "./nearIntents";
 import { acrossAdapter } from "./across";
 import type { IBridgeAdapter, BridgeParams, BridgeQuote } from "./types";
+import type { TokenInfo } from "@/config/tokens";
+import { getTokensForChain } from "@/config/tokens";
 
 // All registered bridge adapters
 const adapters: IBridgeAdapter[] = [cctpAdapter, usdt0Adapter, nearIntentsAdapter, acrossAdapter];
@@ -90,5 +92,48 @@ export function isRouteSupported(
 ): boolean {
   return adapters.some((adapter) =>
     adapter.supportsRoute(fromChain, toChain, fromToken, toToken)
+  );
+}
+
+/**
+ * Query all registered adapters for supported tokens on a chain,
+ * merge/deduplicate by symbol, prefer entries with EVM addresses,
+ * sort alphabetically, and fall back to hardcoded tokens if all adapters
+ * return empty.
+ */
+export async function getAllSupportedTokens(chainId: number): Promise<TokenInfo[]> {
+  const results = await Promise.allSettled(
+    adapters.map((adapter) => adapter.getSupportedTokens(chainId))
+  );
+
+  const merged = new Map<string, TokenInfo>();
+
+  for (const result of results) {
+    if (result.status !== "fulfilled") continue;
+    const tokens = result.value;
+    for (const token of tokens) {
+      const key = token.symbol.toUpperCase();
+      const existing = merged.get(key);
+      if (!existing) {
+        merged.set(key, token);
+      } else {
+        // Prefer the entry that has an EVM contract address (0x-prefixed) for the requested chain
+        const existingAddr = existing.addresses[chainId];
+        const newAddr = token.addresses[chainId];
+        const existingHasEvm = typeof existingAddr === "string" && existingAddr.startsWith("0x");
+        const newHasEvm = typeof newAddr === "string" && newAddr.startsWith("0x");
+        if (newHasEvm && !existingHasEvm) {
+          merged.set(key, token);
+        }
+      }
+    }
+  }
+
+  if (merged.size === 0) {
+    return getTokensForChain(chainId);
+  }
+
+  return Array.from(merged.values()).sort((a, b) =>
+    a.symbol.toUpperCase().localeCompare(b.symbol.toUpperCase())
   );
 }

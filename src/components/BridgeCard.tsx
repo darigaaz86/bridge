@@ -19,7 +19,7 @@ import { useSolanaWallet } from "@/contexts/SolanaWalletContext";
 import { useDamContext } from "@/hooks/useDamContext";
 import { DEFAULT_SLIPPAGE_BPS } from "@/config/constants";
 import { TRON_CHAIN_ID, SOLANA_CHAIN_ID } from "@/config/chains";
-import { getTokensForChain } from "@/config/tokens";
+import { useTokens } from "@/hooks/useTokens";
 import { cn } from "@/lib/utils";
 import { isValidSolanaAddress } from "@/lib/solana";
 import { mainnet, arbitrum } from "wagmi/chains";
@@ -35,6 +35,9 @@ export function BridgeCard() {
   const [amount, setAmount] = useState("");
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
   const [preferFastTransfer, setPreferFastTransfer] = useState(false);
+
+  const { tokens: fromTokens } = useTokens(fromChain);
+  const { tokens: toTokens } = useTokens(toChain);
 
   const { tronAddress, isTronConnected, isTronAvailable, connectTron, disconnectTron } = useTronLink();
   const { solanaAddress, isSolanaConnected, isSolanaAvailable, connectSolana } = useSolanaWallet();
@@ -59,33 +62,29 @@ export function BridgeCard() {
       ? isTronConnected
       : isConnected;
 
-  // Default token when switching to Tron or Solana if current token not available
+  // Default token when switching chains if current token not available
   useEffect(() => {
-    const fromTokens = getTokensForChain(fromChain);
-    const toTokens = getTokensForChain(toChain);
-    if (fromChain === TRON_CHAIN_ID && !fromTokens.some((t) => t.symbol === fromToken)) {
-      setFromToken("USDT");
+    if (!fromTokens.some((t) => t.symbol === fromToken)) {
+      const usdcAvailable = fromTokens.some((t) => t.symbol === "USDC");
+      setFromToken(usdcAvailable ? "USDC" : (fromTokens[0]?.symbol ?? "USDC"));
     }
-    if (fromChain === SOLANA_CHAIN_ID && !fromTokens.some((t) => t.symbol === fromToken)) {
-      setFromToken("USDC");
+    if (!toTokens.some((t) => t.symbol === toToken)) {
+      const usdcAvailable = toTokens.some((t) => t.symbol === "USDC");
+      setToToken(usdcAvailable ? "USDC" : (toTokens[0]?.symbol ?? "USDC"));
     }
-    if (toChain === TRON_CHAIN_ID && !toTokens.some((t) => t.symbol === toToken)) {
-      setToToken("USDT");
-    }
-    if (toChain === SOLANA_CHAIN_ID && !toTokens.some((t) => t.symbol === toToken)) {
-      setToToken("USDC");
-    }
-  }, [fromChain, toChain]);
+  }, [fromChain, toChain, fromTokens, toTokens]);
 
-  // Parse amount to bigint
+  // Parse amount to bigint using the selected from-token's decimals
+  const fromTokenInfo = fromTokens.find((t) => t.symbol === fromToken);
+  const toTokenInfo = toTokens.find((t) => t.symbol === toToken);
   const parsedAmount = useMemo(() => {
     try {
       if (!amount || amount === "0" || amount === "") return 0n;
-      return parseUnits(amount, 6); // USDC/USDT are 6 decimals
+      return parseUnits(amount, fromTokenInfo?.decimals ?? 6);
     } catch {
       return 0n;
     }
-  }, [amount]);
+  }, [amount, fromTokenInfo?.decimals]);
 
   // Quote params (slippage/platform fee from settings; preferFastTransfer affects CCTP)
   const quoteParams = useMemo(() => {
@@ -173,7 +172,6 @@ export function BridgeCard() {
             <ChainSelector
               selectedChainId={fromChain}
               onSelect={setFromChain}
-              excludeChainId={toChain}
               label="From"
             />
             <TokenSelector
@@ -243,7 +241,7 @@ export function BridgeCard() {
           <AmountInput
             value={
               selectedQuote
-                ? (Number(selectedQuote.outputAmount) / 1e6).toFixed(4)
+                ? (Number(selectedQuote.outputAmount) / 10 ** (toTokenInfo?.decimals ?? 6)).toFixed(4)
                 : ""
             }
             onChange={() => {}}

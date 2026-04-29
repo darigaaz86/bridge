@@ -1,3 +1,5 @@
+import type { TokenInfo } from "@/config/tokens";
+
 export type BridgeProvider = "cctp" | "usdt0" | "near-intents" | (string & {});
 
 export type TransactionState =
@@ -117,4 +119,7 @@ export interface IBridgeAdapter {
     toChain: number,
     options?: { depositAddress?: string; depositMemo?: string }
   ): Promise<TransactionStatus>;
+
+  /** Return tokens this adapter supports on the given chain */
+  getSupportedTokens(chainId: number): Promise<TokenInfo[]>;
 }

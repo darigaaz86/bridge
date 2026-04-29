@@ -1,5 +1,6 @@
 import { CHAIN_CONFIG } from "@/config/chains";
-import { getTokenAddressEVM } from "@/config/tokens";
+import { getTokenAddressEVM, TOKENS } from "@/config/tokens";
+import type { TokenInfo } from "@/config/tokens";
 import type {
   IBridgeAdapter,
   BridgeParams,
@@ -246,6 +247,32 @@ class AcrossAdapter implements IBridgeAdapter {
       };
     } catch {
       return { state: "pending", sourceTxHash: txHash, message: "Checking status..." };
+    }
+  }
+
+  async getSupportedTokens(chainId: number): Promise<TokenInfo[]> {
+    try {
+      const usdcAddress = getTokenAddressEVM("USDC", chainId);
+      const usdtAddress = getTokenAddressEVM("USDT", chainId);
+
+      // Return empty for non-EVM chains or chains without Across token addresses
+      if (!usdcAddress || !usdtAddress) {
+        return [];
+      }
+
+      const usdc = TOKENS["USDC"];
+      const usdt = TOKENS["USDT"];
+
+      const result: TokenInfo[] = [];
+      if (usdc) {
+        result.push(usdc);
+      }
+      if (usdt) {
+        result.push(usdt);
+      }
+      return result;
+    } catch {
+      return [];
     }
   }
 }

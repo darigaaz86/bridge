@@ -13,6 +13,9 @@ export interface TokenConfig {
   addresses: Record<number, string>;
 }
 
+/** Alias for TokenConfig used by the dynamic token discovery API surface. */
+export type TokenInfo = TokenConfig;
+
 export const TOKENS: Record<string, TokenConfig> = {
   USDC: {
     symbol: "USDC",
@@ -99,4 +102,73 @@ export function getTokensForChain(chainId: number): TokenConfig[] {
 
 export function getTokenBySymbol(symbol: string): TokenConfig | undefined {
   return TOKENS[symbol];
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic Token Registry Cache
+// ---------------------------------------------------------------------------
+
+interface CacheEntry {
+  tokens: TokenInfo[];
+  timestamp: number;
+}
+
+const TOKEN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+const tokenCache = new Map<number, CacheEntry>();
+
+/**
+ * Merge hardcoded EVM addresses into dynamically discovered tokens.
+ *
+ * For each dynamic token, if a hardcoded token with the same symbol exists,
+ * the hardcoded addresses fill gaps (dynamic addresses take precedence).
+ */
+function mergeHardcodedAddresses(dynamicTokens: TokenInfo[]): TokenInfo[] {
+  return dynamicTokens.map((token) => {
+    const hardcoded = TOKENS[token.symbol] ?? TOKENS[token.symbol.toUpperCase()];
+    if (!hardcoded) return token;
+
+    // Union of addresses: dynamic takes precedence, hardcoded fills gaps
+    const mergedAddresses: Record<number, string> = { ...hardcoded.addresses, ...token.addresses };
+    return { ...token, addresses: mergedAddresses };
+  });
+}
+
+/**
+ * Async token fetcher with in-memory cache.
+ *
+ * 1. Returns cached tokens if the entry is younger than 5 minutes.
+ * 2. On cache miss, dynamically imports `getAllSupportedTokens` from the
+ *    router (dynamic import avoids circular dependency) and fetches tokens.
+ * 3. Merges hardcoded EVM addresses into the dynamic results.
+ * 4. Falls back to `getTokensForChain(chainId)` if the merged result is empty.
+ */
+export async function getTokensForChainAsync(chainId: number): Promise<TokenInfo[]> {
+  const now = Date.now();
+  const cached = tokenCache.get(chainId);
+
+  if (cached && now - cached.timestamp < TOKEN_CACHE_TTL) {
+    return cached.tokens;
+  }
+
+  try {
+    // Dynamic import to break circular dependency (router.ts imports from tokens.ts)
+    const { getAllSupportedTokens } = await import("@/services/router");
+    const dynamicTokens = await getAllSupportedTokens(chainId);
+    const merged = mergeHardcodedAddresses(dynamicTokens);
+
+    if (merged.length === 0) {
+      const fallback = getTokensForChain(chainId);
+      tokenCache.set(chainId, { tokens: fallback, timestamp: now });
+      return fallback;
+    }
+
+    tokenCache.set(chainId, { tokens: merged, timestamp: now });
+    return merged;
+  } catch {
+    // On any failure, return hardcoded fallback and cache it
+    const fallback = getTokensForChain(chainId);
+    tokenCache.set(chainId, { tokens: fallback, timestamp: now });
+    return fallback;
+  }
 }

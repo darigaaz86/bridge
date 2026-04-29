@@ -10,6 +10,8 @@ import { PROVIDER_NAMES } from "@/config/constants";
 import { pad, encodeAbiParameters } from "viem";
 import { AGGREGATOR_ABI } from "@/abi/aggregator";
 import { OFT_ABI } from "@/abi/oft";
+import { TOKENS } from "@/config/tokens";
+import type { TokenInfo } from "@/config/tokens";
 import type {
   IBridgeAdapter,
   BridgeParams,
@@ -244,6 +246,26 @@ class USDT0Adapter implements IBridgeAdapter {
       56: 30, // BSC: ~30s
     };
     return times[fromChain] || 60;
+  }
+
+  async getSupportedTokens(chainId: number): Promise<TokenInfo[]> {
+    try {
+      if (USDT0_OFT_CONTRACTS[chainId] === undefined) {
+        return [];
+      }
+      const usdt = TOKENS["USDT"];
+      const usdt0 = TOKENS["USDT0"];
+      const result: TokenInfo[] = [];
+      if (usdt && usdt.addresses[chainId]) {
+        result.push(usdt);
+      }
+      if (usdt0 && usdt0.addresses[chainId]) {
+        result.push(usdt0);
+      }
+      return result;
+    } catch {
+      return [];
+    }
   }
 }
 

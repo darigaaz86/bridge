@@ -8,9 +8,10 @@ import {
 } from "@/config/contracts";
 import { CHAIN_CONFIG } from "@/config/chains";
 import { PROVIDER_NAMES } from "@/config/constants";
-import { getTokenAddressEVM } from "@/config/tokens";
+import { getTokenAddressEVM, TOKENS } from "@/config/tokens";
 import { pad, encodeAbiParameters } from "viem";
 import { AGGREGATOR_ABI } from "@/abi/aggregator";
+import type { TokenInfo } from "@/config/tokens";
 import type {
   IBridgeAdapter,
   BridgeParams,
@@ -302,6 +303,21 @@ class CCTPAdapter implements IBridgeAdapter {
       43114: 60, // Avalanche: ~1 min
     };
     return finalityTimes[fromChain] || 900;
+  }
+
+  async getSupportedTokens(chainId: number): Promise<TokenInfo[]> {
+    try {
+      if (CCTP_DOMAIN_IDS[chainId] === undefined) {
+        return [];
+      }
+      const usdc = TOKENS["USDC"];
+      if (!usdc || !usdc.addresses[chainId]) {
+        return [];
+      }
+      return [usdc];
+    } catch {
+      return [];
+    }
   }
 }
 
